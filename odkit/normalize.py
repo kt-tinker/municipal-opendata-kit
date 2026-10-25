@@ -114,6 +114,10 @@ def split_address(address: str, prefecture: str, city: str) -> dict | None:
     rest = strip_city(canonical_address(address), prefecture, city)
     if not rest:
         return None
+    # 番地のない住所（「中町」「大竹地内」）は町字だけ（＋「地内」）として決まった形に分ける
+    m_town = re.fullmatch(r"([^\d()（）]+?)(地内|付近|地先)?", rest)
+    if m_town and not re.search(r"[()（）、,]", rest):
+        return {"所在地_町字": m_town.group(1), "所在地_番地以下": m_town.group(2) or "", "建物名等": ""}
     m = ADDRESS_RE.match(rest)
     if not m:
         return None

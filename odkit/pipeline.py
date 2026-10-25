@@ -204,6 +204,12 @@ class Pipeline:
 
     def fill_coords(self, key: str, ds: dict, r: dict, notes: list[str], item_base: str) -> str:
         bbox = self.city["bbox"]
+        # 1つのセルに複数の座標（「35.90、35.92」）→ 1つ目を採り、残りは備考に残す
+        multi = [re.split(r"\s*[、,，]\s*", nfkc(r[c])) for c in ("緯度", "経度")]
+        if len(multi[0]) > 1 and len(multi[0]) == len(multi[1]):
+            extra = "、".join(f"({a}, {b})" for a, b in zip(multi[0][1:], multi[1][1:]))
+            notes.append(f"元データに複数の地点があったため1つ目を採用（ほかの地点：{extra}）")
+            r["緯度"], r["経度"] = multi[0][0], multi[1][0]
         lat, lon = to_decimal_degree(r["緯度"]), to_decimal_degree(r["経度"])
         if valid_coord(lat, lon, bbox):
             if nfkc(r["緯度"]) != str(lat) and not re.fullmatch(r"-?\d+(\.\d+)?", nfkc(r["緯度"])):

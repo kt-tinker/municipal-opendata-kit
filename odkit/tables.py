@@ -27,7 +27,8 @@ def read_table(path: Path, fmt: str = "csv", encoding: str = "auto", sheet: str 
             import openpyxl  # 任意の依存
         except ImportError as e:  # pragma: no cover
             raise SystemExit("Excel を読むには openpyxl が必要です: pip install openpyxl") from e
-        wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
+        # ダウンロードしたファイルは拡張子がないことがあり、openpyxl は拡張子で判定して断るため中身を渡す
+        wb = openpyxl.load_workbook(io.BytesIO(Path(path).read_bytes()), read_only=True, data_only=True)
         ws = wb[sheet] if sheet else wb.worksheets[0]
         it = ws.iter_rows(values_only=True)
         from .clean import cell_to_text

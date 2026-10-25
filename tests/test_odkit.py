@@ -28,7 +28,10 @@ class TestNormalize(unittest.TestCase):
         self.assertEqual(canonical_address("草加市高砂一丁目１番地１号"), "草加市高砂1丁目1-1")
         s = split_address("埼玉県草加市松原1丁目1-5 中央図書館", "埼玉県", "草加市")
         self.assertEqual((s["所在地_町字"], s["所在地_番地以下"], s["建物名等"]), ("松原1丁目", "1-5", "中央図書館"))
-        self.assertIsNone(split_address("埼玉県草加市柿木町地内", "埼玉県", "草加市"))
+        s = split_address("埼玉県草加市柿木町地内", "埼玉県", "草加市")
+        self.assertEqual((s["所在地_町字"], s["所在地_番地以下"]), ("柿木町", "地内"))
+        self.assertEqual(split_address("埼玉県越谷市中町", "埼玉県", "越谷市")["所在地_町字"], "中町")
+        self.assertIsNone(split_address("埼玉県越谷市広場(埼玉県越谷市相模町1丁目)", "埼玉県", "越谷市"))
 
     def test_count(self):
         self.assertEqual(split_count("1棟"), ("1", "棟"))
@@ -94,9 +97,6 @@ class TestPipeline(unittest.TestCase):
             "aed:SOKA-AED-008:name_match": {"action": "use_reference", "name": "市役所", "by": "ai", "reason": "同じ住所の本庁舎"},
             # 候補にない施設名 → 採用されない
             "aed:SOKA-AED-013:name_match": {"action": "use_reference", "name": "存在しない施設", "by": "ai"},
-            # つなげても元の住所に戻らない分割 → 採用されない
-            "cultural_property:SOKA-CUL-002:address_split": {"action": "split", "by": "ai",
-                "split": {"所在地_町字": "柿木町", "所在地_番地以下": "1-1", "建物名等": ""}},
             "aed:SOKA-AED-020:mismatch": {"action": "needs_human", "by": "ai", "reason": "どちらが正しいか市への確認が必要"},
         }}
         (TESTS / "work/soka-test/review/decisions.json").write_text(json.dumps(dec, ensure_ascii=False), "utf-8")
@@ -107,7 +107,7 @@ class TestPipeline(unittest.TestCase):
         ids = {i["id"]: i for i in q["items"]}
         self.assertNotIn("aed:SOKA-AED-008:name_match", ids)
         self.assertIn("aed:SOKA-AED-013:name_match", ids)
-        self.assertIn("rejected_decision", ids["cultural_property:SOKA-CUL-002:address_split"])
+        self.assertNotIn("cultural_property:SOKA-CUL-002:address_split", ids)  # 「地内」は決まった形で分ける
         self.assertEqual(ids["aed:SOKA-AED-020:mismatch"]["waiting_for"], "human")
         self.assertEqual(s["review_applied"], 1)
 
