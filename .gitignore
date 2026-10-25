@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+# 作業ファイル・出力・ダウンロードした元データ
+/work/
+/output/
+/sources/
+/tests/work/
+/tests/output/

@@ -1,0 +1,63 @@
+---
+name: odkit-review
+description: municipal-opendata-kit の確認リスト（work/<市>/review/queue.json）を読み、施設名の照合・住所の分割・位置の付け直し・資料間の食い違いを判断して decisions.json に書く。build のあとに「確認待ち」が残ったときに使う。
+---
+
+# 確認待ちの項目を判断する
+
+`python -m odkit build cities/<市>.toml` が「確認待ち」を出したら、このスキルで判断する。
+あなたの役割は **人の代わりに一次判断をして、根拠を残すこと**。判断はコードで検証され、通らないものは確認リストに戻る。
+
+## 手順
+
+1. `work/<市>/review/queue.json` を読む。`waiting_for: "human"` の項目は飛ばす（すでに人に回したもの）
+2. 項目ごとに、下の基準で判断する。根拠は `context` の中身と、`output/<市>/` の CSV（公共施設の一覧など）だけから取る
+3. `work/<市>/review/decisions.json` の `decisions` に、項目の `id` をキーにして追記する（既存の判断は消さない）
+4. `python -m odkit build cities/<市>.toml` をもう一度実行し、残りを確認する
+5. 最後に、人に見てほしいもの（`needs_human` にしたもの、`rejected_decision` が付いて戻ってきたもの）を一覧にして伝える
+
+## 守ること
+
+- **座標を作らない。** 緯度・経度の数値を書いてはいけない。位置は必ず元データ・公共施設情報・国土地理院の結果から取られる。あなたにできるのは「どの施設の座標を使うか」「どの住所で検索し直すか」を選ぶことだけ
+- **住所を推測で作らない。** `retry_address` に使う住所は、`context` か元データの中に根拠があるもの（表記ゆれの修正、建物名の除去など）に限る
+- **迷ったら `needs_human`。** 理由を `reason` に書く。間違って採用するより、人に回すほうがよい
+- 判断には必ず `"by": "ai"`、`"reason"`（日本語で1〜2文）、`"confidence"`（`high` / `medium` / `low`）を付ける。`low` なら `needs_human` にする
+
+## 種類ごとの基準
+
+### name_match（似た名前の施設が公共施設情報にある）
+- 住所が一致し、名前が同じ施設を指しているとはっきり言える → `{"action": "use_reference", "name": "<候補の名称そのまま>"}`
+  - 例：「草加市役所西棟１階」と「市役所」で住所が同じ → 本庁舎の一部なので採用してよい
+- 候補が複数あり、どれも同じ住所（例：消防局と消防署が同じ建物）→ 名前により近いほうを選ぶ
+- 名前が似ていても住所が違う（例：「草加消防署青柳分署」に対し「草加消防署」は別住所）→ 住所が一致する候補があればそれ、なければ `{"action": "reject"}`
+
+### address_split（住所を町字／番地以下／建物名等に分けられない）
+- `{"action": "split", "split": {"所在地_町字": "...", "所在地_番地以下": "...", "建物名等": "..."}}`
+- 3つをつなげると `context.rest` と一致しなければならない（コードが検証する）
+- 「〇〇町地内」のように番地がないもの → 町字に「〇〇町」、番地以下に「地内」
+
+### geocode（住所から番地・街区まで特定できない）
+- 住所の表記に直せる誤り（全角・半角、建物名の混入、「番地」の表記ゆれ）がある → `{"action": "retry_address", "address": "<直した住所>"}`
+- `context.reference_names` に同じ施設がある → `{"action": "use_reference", "name": "<その名称>"}`
+- 元の住所が「〇〇町地内」のように町までしかない → `{"action": "accept_town"}`（位置は「要確認」として残る）
+
+### mismatch（同じ施設なのに資料によって住所が違う）
+- どちらが正しいかは市にしかわからない。基本は `{"action": "prefer_reference"}`（公共施設情報を採用）とし、`reason` に「市への確認事項」として違いを書く
+- 片方が明らかな誤記（存在しない番地の形など）と言える根拠がある場合だけ `prefer_source`
+
+## decisions.json の例
+
+```json
+{
+  "decisions": {
+    "aed:SOKA-AED-008:name_match": {
+      "action": "use_reference", "name": "市役所",
+      "by": "ai", "confidence": "high", "reason": "住所が同じ高砂1丁目1-1で、市役所本庁舎の西棟を指している"
+    },
+    "aed:SOKA-AED-020:mismatch": {
+      "action": "prefer_reference",
+      "by": "ai", "confidence": "medium", "reason": "AED情報は松原1丁目1-9、公共施設情報は1-5。市に確認したい"
+    }
+  }
+}
+```

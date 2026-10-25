@@ -1,0 +1,148 @@
+# 埼玉県草加市の設定（このキットの最初の適用例）
+# 元データは埼玉県オープンデータポータルサイトから CSV をダウンロードし、sources/soka/ に置く。
+#   python -m odkit build cities/soka.toml
+
+standard_version = "2026-08-01"
+
+[city]
+slug = "soka"
+code = "112216"
+prefecture = "埼玉県"
+name = "草加市"
+id_prefix = "SOKA"
+bbox = [35.77, 139.74, 35.88, 139.87]   # 範囲チェック用 [南端, 西端, 北端, 東端]
+license = "公共データ利用規約 第1.0版（PDL1.0）"
+
+# 位置がないデータに、同じ名前の施設の座標を転記するための「元帳」
+[reference]
+dataset = "public_facility"
+title = "公共施設情報"
+name_strip = ["草加市立"]
+
+# ---------------- 公共施設 ----------------
+[datasets.public_facility]
+standard = "public_facility"
+title = "【草加市】公共施設情報"
+page = "https://opendata.pref.saitama.lg.jp/datasets/485"
+source = "sources/soka/public_facility.csv"
+id_code = "FAC"
+notes = [{ column = "種別", label = "施設種別" }, "自由記述欄"]
+
+[datasets.public_facility.columns]
+"名称" = "名称"
+"名称_通称" = "通称"
+"所在地_連結表記" = "住所_表記"
+"緯度" = "施設_緯度"
+"経度" = "施設_経度"
+"電話番号" = "施設_電話番号"
+"URL" = "ホームページ"
+"開始時間" = "開始時間"
+"終了時間" = "終了時間"
+"利用可能時間特記事項" = "日時備考"
+"説明" = "概要"
+
+# ---------------- AED ----------------
+[datasets.aed]
+standard = "aed"
+title = "【草加市】AED設置場所情報"
+page = "https://opendata.pref.saitama.lg.jp/datasets/147"
+source = "sources/soka/aed.csv"
+id_code = "AED"
+notes = ["情報源（ソース）", "日時備考"]
+
+[datasets.aed.columns]
+"名称" = "設置場所_名称"
+"名称_カナ" = "設置場所_名称_カナ"
+"所在地_連結表記" = "設置場所_住所"
+"電話番号" = "設置場所_電話番号"
+"緯度" = "設置場所_緯度"
+"経度" = "設置場所_経度"
+"設置位置" = "設置場所_詳細"
+"開始時間" = "開始時間"
+"終了時間" = "終了時間"
+"利用可能日時特記事項" = "利用可能日：{利用可能日}／利用可能時間：{利用可能時間}"
+"小児対応設備の有無" = "小児用パッドの有無"
+"画像1" = "AED画像_画像"
+"画像1_ライセンス" = "AED画像_ライセンス"
+
+# ---------------- 文化財 ----------------
+[datasets.cultural_property]
+standard = "cultural_property"
+title = "【草加市】文化財一覧"
+page = "https://opendata.pref.saitama.lg.jp/datasets/180"
+source = "sources/soka/cultural_property.csv"
+id_code = "CUL"
+wareki = ["文化財指定日"]
+notes = ["祭日", "文化財公開の有無", "文化財保有施設", "自由記述欄"]
+count_split = { column = "員数", number = "員数（数）", unit = "員数（単位）" }
+
+[datasets.cultural_property.columns]
+"名称" = "文化財名"
+"文化財分類" = "指定区分"
+"種類" = "カテゴリ"
+"場所名称" = "場所名称"
+"所在地_連結表記" = "場所_住所"
+"緯度" = "場所_緯度"
+"経度" = "場所_経度"
+"所有者等" = "文化財所有者"
+"文化財指定日" = "指定年月日"
+"画像" = "画像"
+"画像_ライセンス" = "画像_ライセンス"
+"概要" = "概要"
+
+# ---------------- 観光施設（観光地情報＋景観情報の2つから作る） ----------------
+[datasets.tourism]
+standard = "tourism"
+title = "【草加市】観光地情報／景観情報"
+page = "https://opendata.pref.saitama.lg.jp/datasets/407 https://opendata.pref.saitama.lg.jp/datasets/452"
+id_code = "TOUR"
+id_digits = 2
+dedupe_by_name = true
+
+[[datasets.tourism.inputs]]
+source = "sources/soka/kanko.csv"
+note = "出典：草加市 観光地情報"
+notes = [{ column = "観光地_種別", label = "種別" }, "日時備考", "観光地_自由記述欄"]
+[datasets.tourism.inputs.columns]
+"名称" = "観光地_名称"
+"説明" = "観光地_紹介文"
+"所在地_連結表記" = "観光地_住所"
+"緯度" = "観光地_緯度"
+"経度" = "観光地_経度"
+"開始時間" = "開始時間"
+"終了時間" = "終了時間"
+"利用可能日時特記事項" = "{観光地_利用可能時間情報}／休業：{観光地_休業情報}"
+"連絡先名称" = "観光地_連絡先"
+"連絡先電話番号" = "観光地_電話番号"
+"連絡先メールアドレス" = "観光地_メールアドレス"
+"URL" = "観光地_URL"
+"画像" = "観光地_画像"
+"画像_ライセンス" = "観光地_画像_ライセンス"
+
+[[datasets.tourism.inputs]]
+source = "sources/soka/keikan.csv"
+note = "出典：草加市 景観情報"
+notes = [{ column = "区分", label = "種別" }, "自由記述欄"]
+[datasets.tourism.inputs.columns]
+"名称" = "名称"
+"説明" = "概要文（補足説明）"
+"所在地_連結表記" = "場所_住所"
+"緯度" = "場所_緯度"
+"経度" = "場所_経度"
+"アクセス方法" = "アクセス情報"
+"駐車場情報" = "駐車場情報"
+"URL" = "URL"
+"画像" = "景観情報_画像"
+"画像_ライセンス" = "景観情報_画像_ライセンス"
+
+# ---------------- 指定緊急避難場所（埼玉県の一覧から草加市分を抜き出す） ----------------
+[datasets.evacuation_space]
+standard = "evacuation_space"
+title = "【埼玉県】指定緊急避難場所一覧（草加市分）"
+page = "埼玉県オープンデータポータルサイト「【埼玉県】指定緊急避難場所一覧」"
+source = "sources/soka/evacuation_space.xlsx"
+format = "xlsx"
+id_code = "EVA"
+passthrough = true                       # 元データがすでに標準の列名
+filter = { column = "所在地_連結表記", contains = "草加市" }
+constants = { "全国地方公共団体コード" = "110001", "地方公共団体名" = "埼玉県" }

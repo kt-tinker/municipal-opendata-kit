@@ -1,0 +1,63 @@
+# テスト用：草加市の元データ形式に合わせた一部データで、パイプラインを通す
+standard_version = "2026-08-01"
+
+[city]
+slug = "soka-test"
+code = "112216"
+prefecture = "埼玉県"
+name = "草加市"
+id_prefix = "SOKA"
+bbox = [35.77, 139.74, 35.88, 139.87]
+license = "公共データ利用規約 第1.0版（PDL1.0）"
+
+[reference]
+dataset = "public_facility"
+title = "公共施設情報"
+name_strip = ["草加市立"]
+
+[datasets.public_facility]
+standard = "public_facility"
+source = "fixtures/soka/public_facility.csv"
+id_code = "FAC"
+notes = [{ column = "種別", label = "施設種別" }]
+[datasets.public_facility.columns]
+"名称" = "名称"
+"名称_通称" = "通称"
+"所在地_連結表記" = "住所_表記"
+"緯度" = "施設_緯度"
+"経度" = "施設_経度"
+"電話番号" = "施設_電話番号"
+"説明" = "概要"
+
+[datasets.aed]
+standard = "aed"
+source = "fixtures/soka/aed.csv"
+id_code = "AED"
+[datasets.aed.columns]
+"名称" = "設置場所_名称"
+"名称_カナ" = "設置場所_名称_カナ"
+"所在地_連結表記" = "設置場所_住所"
+"電話番号" = "設置場所_電話番号"
+"緯度" = "設置場所_緯度"
+"経度" = "設置場所_経度"
+"設置位置" = "設置場所_詳細"
+"利用可能日時特記事項" = "利用可能日：{利用可能日}／利用可能時間：{利用可能時間}"
+"小児対応設備の有無" = "小児用パッドの有無"
+
+[datasets.cultural_property]
+standard = "cultural_property"
+source = "fixtures/soka/cultural_property.csv"
+id_code = "CUL"
+wareki = ["文化財指定日"]
+count_split = { column = "員数", number = "員数（数）", unit = "員数（単位）" }
+[datasets.cultural_property.columns]
+"名称" = "文化財名"
+"文化財分類" = "指定区分"
+"種類" = "カテゴリ"
+"場所名称" = "場所名称"
+"所在地_連結表記" = "場所_住所"
+"緯度" = "場所_緯度"
+"経度" = "場所_経度"
+"所有者等" = "文化財所有者"
+"文化財指定日" = "指定年月日"
+"概要" = "概要"
