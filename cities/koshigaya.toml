@@ -1,0 +1,71 @@
+# 埼玉県越谷市の設定（2番目の適用例）
+# 越谷市は公共施設・避難場所・観光・文化財をすでに自治体標準の形式で公開しているので、
+# ここでは「表記の崩れの修正」と、住所も座標もない AED への位置付けが中心になる。
+#   python -m odkit fetch cities/koshigaya.toml
+#   python -m odkit build cities/koshigaya.toml
+
+standard_version = "2026-08-01"
+
+[city]
+slug = "koshigaya"
+code = "112224"
+prefecture = "埼玉県"
+name = "越谷市"
+id_prefix = "KOSHIGAYA"
+bbox = [35.83, 139.71, 35.97, 139.87]   # 範囲チェック用（市域を少し広めに囲む）[南端, 西端, 北端, 東端]
+license = "公共データ利用規約 第1.0版（PDL1.0）"
+
+[reference]
+dataset = "public_facility"
+title = "公共施設一覧"
+name_strip = ["越谷市立"]
+
+# ---------------- 公共施設（標準形式・座標あり） ----------------
+[datasets.public_facility]
+standard = "public_facility"
+title = "【越谷市】公共施設一覧"
+page = "https://opendata.pref.saitama.lg.jp/datasets/552"
+source = "https://opendata.pref.saitama.lg.jp/resource_download/2757"
+id_code = "FAC"
+passthrough = true
+
+# ---------------- AED（施設名と設置場所だけ。住所・座標なし） ----------------
+[datasets.aed]
+standard = "aed"
+title = "【越谷市】24時間使用可能なAED設置場所一覧"
+page = "https://opendata.pref.saitama.lg.jp/datasets/71"
+source = "https://opendata.pref.saitama.lg.jp/resource_download/380"
+id_code = "AED"
+constants = { "利用可能日時特記事項" = "24時間使用可能" }
+
+[datasets.aed.columns]
+"名称" = "設置施設名"
+"設置位置" = "設置場所"
+
+# ---------------- 文化財（標準形式・Excel） ----------------
+[datasets.cultural_property]
+standard = "cultural_property"
+title = "【越谷市】文化財一覧"
+page = "https://opendata.pref.saitama.lg.jp/datasets/491"
+source = "https://opendata.pref.saitama.lg.jp/resource_download/7859"
+format = "xlsx"
+id_code = "CUL"
+passthrough = true
+
+# ---------------- 観光施設（標準形式） ----------------
+[datasets.tourism]
+standard = "tourism"
+title = "【越谷市】観光施設一覧"
+page = "https://opendata.pref.saitama.lg.jp/datasets/507"
+source = "https://opendata.pref.saitama.lg.jp/resource_download/5609"
+id_code = "TOUR"
+passthrough = true
+
+# ---------------- 指定緊急避難場所（標準形式・座標あり） ----------------
+[datasets.evacuation_space]
+standard = "evacuation_space"
+title = "【越谷市】指定緊急避難場所一覧"
+page = "https://opendata.pref.saitama.lg.jp/datasets/299"
+source = "https://opendata.pref.saitama.lg.jp/resource_download/6757"
+id_code = "EVA"
+passthrough = true

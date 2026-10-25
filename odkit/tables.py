@@ -30,10 +30,12 @@ def read_table(path: Path, fmt: str = "csv", encoding: str = "auto", sheet: str 
         wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
         ws = wb[sheet] if sheet else wb.worksheets[0]
         it = ws.iter_rows(values_only=True)
+        from .clean import cell_to_text
+
         cols = [str(c).strip() if c is not None else "" for c in next(it)]
         rows = []
         for values in it:
-            vals = ["" if v is None else str(v).strip() for v in values]
+            vals = [cell_to_text(v) for v in values]
             if any(vals):
                 rows.append(dict(zip(cols, vals)))
         return cols, rows

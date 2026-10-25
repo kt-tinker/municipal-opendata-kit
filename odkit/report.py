@@ -53,6 +53,16 @@ def write_readme(cfg: dict, summary: dict, out_dir: Path) -> Path:
         for m in summary["mismatches"]:
             lines.append(f"- {m['name']}：{m['address']}／公共施設情報「{m['reference_address']}」")
         lines.append("")
+    if summary.get("fixes"):
+        groups: dict[tuple, list] = {}
+        for f in summary["fixes"]:
+            groups.setdefault((f["dataset"], f["why"]), []).append(f)
+        lines += ["## 元データの表記を直した箇所", "", "| データ | 内容 | 件数 | 例 |", "| --- | --- | --- | --- |"]
+        for (ds, why), fs in groups.items():
+            ex = fs[0]
+            sample = f"「{ex['before']}」→「{ex['after']}」" if ex["after"] else f"「{ex['before']}」→（空欄）"
+            lines.append(f"| {cfg['datasets'][ds].get('title', ds)} | {why} | {len(fs)} | {sample} |")
+        lines += ["", "1件ずつの記録は work/ の summary.json にあります。", ""]
     lines += [
         "## 注意事項",
         "",

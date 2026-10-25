@@ -40,6 +40,8 @@ description: municipal-opendata-kit の確認リスト（work/<市>/review/queue
 - 住所の表記に直せる誤り（全角・半角、建物名の混入、「番地」の表記ゆれ）がある → `{"action": "retry_address", "address": "<直した住所>"}`
 - `context.reference_names` に同じ施設がある → `{"action": "use_reference", "name": "<その名称>"}`
 - 元の住所が「〇〇町地内」のように町までしかない → `{"action": "accept_town"}`（位置は「要確認」として残る）
+- 住所がない（`address` が空）が、名前に町名・丁目が入っている（例：「セブンイレブン越谷東大沢2丁目店」）→ `{"action": "accept_town", "address": "越谷市東大沢2丁目"}`（名前から読み取れる町字の代表点を「要確認」として付ける）。名前から読み取れる範囲より細かい番地は書かない。町名もわからなければ `needs_human`
+- 場所を持たないもの（無形文化財、天然記念物の動物など）→ `{"action": "no_location"}`
 
 ### mismatch（同じ施設なのに資料によって住所が違う）
 - どちらが正しいかは市にしかわからない。基本は `{"action": "prefer_reference"}`（公共施設情報を採用）とし、`reason` に「市への確認事項」として違いを書く

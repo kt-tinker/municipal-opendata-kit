@@ -20,7 +20,7 @@ KINDS = {
 }
 
 ACTIONS = {
-    "geocode": {"retry_address", "use_reference", "accept_town", "needs_human"},
+    "geocode": {"retry_address", "use_reference", "accept_town", "no_location", "needs_human"},
     "name_match": {"use_reference", "reject", "needs_human"},
     "address_split": {"split", "needs_human"},
     "mismatch": {"prefer_reference", "prefer_source", "needs_human"},

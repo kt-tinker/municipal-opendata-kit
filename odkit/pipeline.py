@@ -25,6 +25,7 @@ from .normalize import (
     to_decimal_degree,
     wareki_to_iso,
 )
+from .clean import clean_row
 from .review import Review
 from .tables import read_table, write_std_csv
 
@@ -88,6 +89,7 @@ class Pipeline:
         self.geocoder = geo.Geocoder(self.work / "geocode_cache.json", offline=offline)
         self.stats: dict[str, Stats] = {}
         self.mismatches: list[dict] = []
+        self.fixes: list[dict] = []
         self.reference_index: dict[str, dict] = {}
         self.reference_cfg = cfg.get("reference", {})
 
@@ -101,9 +103,9 @@ class Pipeline:
         return self.city["name"]
 
     def ref_key(self, name: str) -> str:
-        n = nfkc(name)
+        n = nfkc(name).replace("ヶ", "ケ").replace("ヵ", "カ")  # 「越ヶ谷」「越ケ谷」の揺れ
         for s in self.reference_cfg.get("name_strip", []):
-            n = n.replace(s, "")
+            n = n.replace(nfkc(s).replace("ヶ", "ケ"), "")
         return re.sub(r"\s", "", n)
 
     def source_path(self, inp: dict, key: str) -> Path:
@@ -140,6 +142,9 @@ class Pipeline:
         for k, v in {**defaults, **inp.get("constants", {})}.items():
             if k in r and not r[k]:
                 r[k] = v
+        for col, before, after, why in clean_row(r, self.pref, self.name):
+            self.fixes.append({"dataset": key, "id": r["ID"] or f"#{index + 1}", "column": col,
+                               "before": before, "after": after, "why": why})
         if not r["ID"]:
             r["ID"] = f"{self.city['id_prefix']}-{ds['id_code']}-{index + 1:0{ds.get('id_digits', 3)}d}"
         for spec in inp.get("notes", []):
@@ -231,7 +236,11 @@ class Pipeline:
                 notes.append(geo.note_reference(self.name, self.reference_cfg.get("title", "公共施設情報")) + f"（{hit['ID']}・判断による）")
                 return "reference"
             d = None
-        if d and d["action"] == "retry_address":
+        if d and d["action"] == "no_location":  # 無形文化財・天然記念物の動物など、場所を持たないもの
+            self.review.record(item_id, d)
+            notes.append("所在地を持たないため緯度経度なし（判断による）")
+            return "none"
+        if d and d["action"] in ("retry_address", "accept_town") and d.get("address"):
             alt = full_address(d.get("address", ""), self.pref, self.name)
             if not alt.startswith(self.pref + self.name):
                 d = None
@@ -256,6 +265,8 @@ class Pipeline:
             self.review.record(item_id, d)
             r["緯度"], r["経度"] = str(best["lat"]), str(best["lon"])
             notes.append(geo.NOTE_TOWN)
+            if d.get("address"):
+                notes.append(f"住所がないため「{query}」として検索（判断による）")
             return "town"
         candidates = [{"title": x["title"], "precision": geo.judge_precision(query, x["title"], self.pref, self.name)} for x in (results or [])[:5]]
         self.review.ask(item_id, "geocode", {
@@ -363,6 +374,7 @@ class Pipeline:
             "review_pending": len(self.review.queue),
             "review_applied": len(self.review.applied),
             "mismatches": self.mismatches,
+            "fixes": self.fixes,
             "geocoder_live_calls": self.geocoder.live_calls,
         }
         (self.work / "summary.json").write_text(json.dumps(summary, ensure_ascii=False, indent=1), "utf-8")

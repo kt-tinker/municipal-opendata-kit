@@ -47,6 +47,23 @@ class TestNormalize(unittest.TestCase):
         self.assertEqual(j("埼玉県八潮市中央一丁目"), "none")
 
 
+class TestClean(unittest.TestCase):
+    def test_koshigaya_style_values(self):
+        from odkit.clean import clean_row
+        r = {"文化財指定日": "42599", "開始時間": "0.25", "終了時間": "0.75", "所在地_市区町村": "越谷市野島32",
+             "所在地_町字": "大沢３", "所在地_番地以下": "6ｰ1", "所在地_連結表記": "埼玉県越谷市大沢３－６－１",
+             "法人番号": "2.03E+12", "電話番号": "(048)970-7411"}
+        fixes = clean_row(r, "埼玉県", "越谷市")
+        self.assertEqual(r["文化財指定日"], "2016-08-17")
+        self.assertEqual((r["開始時間"], r["終了時間"]), ("06:00", "18:00"))
+        self.assertEqual(r["所在地_市区町村"], "越谷市")
+        self.assertEqual((r["所在地_町字"], r["所在地_番地以下"]), ("大沢3", "6-1"))
+        self.assertEqual(r["所在地_連結表記"], "埼玉県越谷市大沢3-6-1")
+        self.assertEqual(r["法人番号"], "")
+        self.assertEqual(r["電話番号"], "048-970-7411")
+        self.assertEqual(len(fixes), 9)
+
+
 class TestPipeline(unittest.TestCase):
     def setUp(self):
         for d in ("work/soka-test", "output/soka-test"):
