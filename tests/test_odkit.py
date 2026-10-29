@@ -67,6 +67,41 @@ class TestClean(unittest.TestCase):
         self.assertEqual(len(fixes), 9)
 
 
+class TestDiscover(unittest.TestCase):
+    """ポータルの HTML の形（2026年10月時点で確認したもの）を模して、探索の流れを確かめる。"""
+
+    PAGES = {
+        "/datasets?q=": '<li><a href="#" class="side_condition side_organization" data-type="organization" data-id="43">越谷市（3）</a></li>'
+                        '<a href="#" data-type="organization" data-id="42">草加市（10）</a>',
+        "/datasets?organization_id=43&page=1": '<a href="https://x/datasets/71"><h3>【越谷市】24時間使用可能なAED設置場所一覧</h3><p>説明</p></a>'
+                                              '<a href="https://x/datasets/552">【越谷市】公共施設一覧</a><a href="https://x/datasets/531">【越谷市】公衆トイレ一覧</a>',
+        "/datasets?organization_id=43&page=2": '<a href="https://x/datasets/71">【越谷市】24時間使用可能なAED設置場所一覧</a>',
+        "/datasets/71": '<a href="https://x/resources/380">24時間使用可能なAED設置場所一覧</a>',
+        "/datasets/552": '<a href="https://x/resources/2757">越谷市の公共施設一覧</a>',
+        "/resources/380": '<dl><dt>ファイル名</dt><dd>24aed.csv</dd></dl><a>ダウンロード</a><td>最終更新</td><td>2024年09月27日</td>',
+        "/resources/2757": '<dt>ファイル名</dt><dd>112224_publicfacility .csv</dd><a>ダウンロード</a><td>最終更新</td><td>2025年12月10日</td>',
+    }
+
+    def test_discover(self):
+        import tempfile
+        from unittest import mock
+        from odkit import discover as dc
+
+        def fake_get(path, interval=0.5):
+            key = "/datasets?q=" if path.startswith("/datasets?q=") else path
+            return self.PAGES.get(key, "")
+
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.object(dc, "get", fake_get):
+            r = dc.discover("越谷市", "koshigaya", Path(tmp))
+            self.assertEqual(r["organization_id"], "43")
+            self.assertEqual([c["dataset_id"] for c in r["candidates"]["aed"]], ["71"])
+            self.assertEqual(r["candidates"]["public_facility"][0]["resources"][0]["file"], "112224_publicfacility .csv")
+            self.assertNotIn("531", [c["dataset_id"] for c in r["candidates"]["public_facility"]])
+            draft = (Path(tmp) / "cities" / "koshigaya.draft.toml").read_text("utf-8")
+            self.assertIn("resource_download/380", draft)
+            self.assertIn("# [datasets.cultural_property] … ポータルに見つかりませんでした", draft)
+
+
 class TestPipeline(unittest.TestCase):
     def setUp(self):
         for d in ("work/soka-test", "output/soka-test"):

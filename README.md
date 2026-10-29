@@ -55,8 +55,13 @@ python -m odkit build cities/soka.toml
 
 ### 新しい市を追加する
 
-1. `cities/soka.toml` を写して `cities/<市>.toml` を作る
-2. 元データを `sources/<市>/` に置く
+1. 埼玉県内の市町村なら、県のオープンデータポータルから候補を自動で探せる
+   ```bash
+   python -m odkit discover 川口市 --slug kawaguchi
+   ```
+   標準データセットに当たりそうなデータとダウンロード先を調べ、`cities/<slug>.draft.toml`（設定の下書き）を作る。
+   県外の市町村は `cities/soka.toml` を写して `cities/<市>.toml` を作り、元データを `sources/<市>/` に置く
+2. `python -m odkit fetch cities/<市>.toml` で元データを取得する
 3. Claude Code で `/odkit-map-columns` を実行し、列の対応づけを下書きしてもらう（`python -m odkit inspect` の結果を使う）
 4. 内容を確認して `build` → `/odkit-review` → `build`
 

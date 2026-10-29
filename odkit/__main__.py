@@ -93,13 +93,34 @@ def cmd_status(cfg: dict) -> None:
     print(f"確認待ち {data['pending']}件 {kinds}（うち人の判断待ち {human}件）")
 
 
+def cmd_discover(city: str, slug: str | None) -> int:
+    from .discover import discover
+
+    if not slug:
+        raise SystemExit("--slug を付けてください（例：--slug kawaguchi）")
+    base = Path(__file__).resolve().parent.parent
+    r = discover(city, slug, base)
+    print(f"{city}：ポータルのデータセット {r['dataset_count']}件（組織ID {r['organization_id']}）")
+    for key, cands in r["candidates"].items():
+        if not cands:
+            print(f"  {key}: 見つかりませんでした")
+        for c in cands:
+            files = "、".join(f"{x['file']}（{x['updated']}）" for x in c["resources"])
+            print(f"  {key}: {c['title']} → {files}")
+    print(f"下書き: cities/{slug}.draft.toml / 詳細: work/{slug}/discover.json")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="odkit", description="自治体オープンデータを標準形式に整える")
-    ap.add_argument("command", choices=["fetch", "inspect", "build", "status"])
-    ap.add_argument("config", type=Path)
+    ap.add_argument("command", choices=["discover", "fetch", "inspect", "build", "status"])
+    ap.add_argument("config", help="設定ファイル（discover のときは市町村名）")
     ap.add_argument("--offline", action="store_true", help="住所検索をキャッシュだけで行う")
+    ap.add_argument("--slug", help="discover：設定ファイル名などに使う英字名（例 kawaguchi）")
     a = ap.parse_args(argv)
-    cfg = load_config(a.config)
+    if a.command == "discover":
+        return cmd_discover(a.config, a.slug)
+    cfg = load_config(Path(a.config))
     if a.command == "fetch":
         cmd_fetch(cfg)
     elif a.command == "inspect":
