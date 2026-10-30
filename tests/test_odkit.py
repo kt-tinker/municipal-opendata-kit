@@ -99,6 +99,13 @@ class TestTownMaster(unittest.TestCase):
         self.assertIsNone(self.split("埼玉県川口市青木9-1-1"))   # 存在しない丁目
         self.assertIsNone(self.split("埼玉県川口市存在しない町1-1"))
 
+    def test_compare_key(self):
+        from odkit.townmaster import compare_key
+        self.assertEqual(compare_key("西川口1丁目外"), compare_key("西川口1 外"))
+        self.assertEqual(compare_key("大字新井宿保坂山306"), compare_key("新井宿保坂山306"))
+        self.assertEqual(compare_key("青木2丁目1-1"), compare_key("青木2-1-1"))
+        self.assertEqual(compare_key("栄町2丁目地内"), compare_key("栄町2-地内"))
+
     def test_town_id(self):
         self.assertEqual(self.tm.town_id("青木2"), ("青木2丁目", "0071002"))
         self.assertEqual(self.tm.town_id("赤山"), ("大字赤山", "0098000"))

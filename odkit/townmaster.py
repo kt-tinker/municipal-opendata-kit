@@ -33,8 +33,9 @@ def _key(s: str) -> str:
 def compare_key(s: str) -> str:
     """分け方が変わっても同じ住所なら同じになる比較用の表記（「大字」の有無、「2丁目1」と「2-1」を同一視）。"""
     t = _key(canonical_address(s)).replace("大字", "")
-    t = re.sub(r"(\d+)丁目-?", r"\1-", t)
-    return t.rstrip("-")
+    t = re.sub(r"(\d+)丁目-?(?=\d)", r"\1-", t)
+    t = re.sub(r"(\d+)丁目-?", r"\1", t)  # 「1丁目外」「1丁目地内」と「1外」「1-地内」を同じに
+    return t.rstrip("-").replace("-地内", "地内")
 
 
 class TownMaster:
