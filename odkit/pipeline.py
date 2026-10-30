@@ -312,7 +312,7 @@ class Pipeline:
             r["町字ID"] = split["町字ID"]
 
     def fill_coords(self, key: str, ds: dict, r: dict, notes: list[str], item_base: str) -> str:
-        bbox = self.city["bbox"]
+        bbox = self.bbox
         # 1つのセルに複数の座標（「35.90、35.92」）→ 1つ目を採り、残りは備考に残す
         multi = [re.split(r"\s*[、,，]\s*", nfkc(r[c])) for c in ("緯度", "経度")]
         if len(multi[0]) > 1 and len(multi[0]) == len(multi[1]):
@@ -506,7 +506,47 @@ class Pipeline:
         write_std_csv(self.out / f"{self.city['code']}_{ds['standard']}.csv", cols, rows)
         return rows
 
+    def auto_bbox(self) -> list[float]:
+        """市の範囲（範囲チェック用）を元データの座標から決める。AI や人が座標の数値を書かなくてよいように。
+
+        全データセットの元の座標の中央値から 0.2 度（約20km）以上離れたもの（市外の施設・入力の誤り）を除き、
+        残りの最小・最大に 0.01 度（約1km）の余白を足す。座標が20件未満なら決めない。
+        """
+        pts = []
+        for key, ds in self.cfg["datasets"].items():
+            for inp in self.inputs(ds):
+                cols = inp.get("columns", {})
+                for s in self.load_input(key, inp):
+                    lat = to_decimal_degree(render(cols.get("緯度", "緯度"), s).split("、")[0])
+                    lon = to_decimal_degree(render(cols.get("経度", "経度"), s).split("、")[0])
+                    if lat is not None and lon is not None:
+                        pts.append((lat, lon))
+        if len(pts) < 20:
+            raise SystemExit("元データの座標が少ないため、市の範囲を自動で決められません。"
+                             "cities/<市>.toml の bbox を人が確かめて書いてください")
+        mid = lambda xs: sorted(xs)[len(xs) // 2]
+        mlat, mlon = mid([a for a, _ in pts]), mid([b for _, b in pts])
+        near = [(a, b) for a, b in pts if abs(a - mlat) < 0.2 and abs(b - mlon) < 0.2]
+        m = 0.01
+        return [round(min(a for a, _ in near) - m, 4), round(min(b for _, b in near) - m, 4),
+                round(max(a for a, _ in near) + m, 4), round(max(b for _, b in near) + m, 4)]
+
+    def check_town_master(self) -> None:
+        """町字マスターの団体コードが設定と合っているか（コードの書き間違いで別の市のマスターを使わないように）。"""
+        if not self.town_master or isinstance(self.city.get("town_master"), str):
+            return
+        expected = set(self.town_master_codes)
+        for p in self.town_master_paths:
+            codes = {r["lg_code"] for r in TownMaster.read(p)}
+            names = {r["city"] + r.get("ward", "") for r in TownMaster.read(p)}
+            if not codes <= expected or not all(n.startswith(self.name) for n in names):
+                raise SystemExit(f"町字マスター {p.name} が {self.name} のものではありません（{codes} {names}）。"
+                                 "[city] の code（政令指定都市は [city.wards]）を確かめてください")
+
     def run(self) -> dict:
+        self.check_town_master()
+        bbox = self.city.get("bbox", "auto")
+        self.bbox = self.auto_bbox() if bbox == "auto" else bbox
         datasets = self.cfg["datasets"]
         order = list(datasets)
         ref = self.reference_cfg.get("dataset")
@@ -530,6 +570,8 @@ class Pipeline:
             "fixes": self.fixes,
             "outside": self.outside,
             "town_master": bool(self.town_master),
+            "bbox": self.bbox,
+            "bbox_auto": self.city.get("bbox", "auto") == "auto",
             "geocoder_live_calls": self.geocoder.live_calls,
             "geocoder_failed": self.geocoder.failed,
         }

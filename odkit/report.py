@@ -50,7 +50,10 @@ def write_readme(cfg: dict, summary: dict, out_dir: Path) -> Path:
     for key, ds in cfg["datasets"].items():
         p = summary["datasets"][key]["precision"]
         lines.append(f"| {ds.get('title', key)} | " + " | ".join(str(p.get(k, 0)) for k in LABELS) + " |")
-    lines += ["", "各行の備考欄にも、位置をどう付けたかを書いています。", ""]
+    lines += ["", "各行の備考欄にも、位置をどう付けたかを書いています。"]
+    if summary.get("bbox_auto"):
+        lines.append(f"市の範囲（座標の確認に使う範囲）は、元データの座標から自動で決めました：{summary['bbox']}")
+    lines.append("")
     if summary["mismatches"]:
         lines += ["## 資料間で住所が食い違う施設", "", "座標は公共施設情報の値を採用しています。", ""]
         for m in summary["mismatches"]:

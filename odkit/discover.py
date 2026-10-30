@@ -178,7 +178,7 @@ def latest(resources: list[dict]) -> dict | None:
 def write_draft(result: dict, slug: str, path: Path) -> None:
     lines = [
         f"# {result['city']} の設定の下書き（odkit discover が自動生成）",
-        "# 1. [city] の code（全国地方公共団体コード）と bbox を確かめて埋める",
+        "# 1. [city] の code（全国地方公共団体コード）を確かめて埋める。政令指定都市は [city.wards] も",
         "# 2. python -m odkit fetch → python -m odkit inspect → Claude Code で /odkit-map-columns",
         "# 3. 仕上がったら cities/" + slug + ".toml に名前を変える",
         "",
@@ -190,7 +190,7 @@ def write_draft(result: dict, slug: str, path: Path) -> None:
         'prefecture = "埼玉県"',
         f'name = "{result["city"]}"',
         f'id_prefix = "{slug.upper()}"',
-        "bbox = [0, 0, 0, 0]  # 要確認：[南端, 西端, 北端, 東端]",
+        'bbox = "auto"        # 市の範囲は元データの座標から自動で決める（座標が少ない市は人が書く）',
         'license = "公共データ利用規約 第1.0版（PDL1.0）"',
         "",
         "[reference]",
