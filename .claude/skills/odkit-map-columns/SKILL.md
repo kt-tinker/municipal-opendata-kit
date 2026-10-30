@@ -7,8 +7,9 @@ description: 新しい市町村の元データ（CSV/Excel）の列を、自治�
 
 ## 手順
 
-1. `cities/<市>.toml` がなければ、`cities/soka.toml` を写して `[city]`（slug・コード・都道府県・市名・ID の接頭辞・範囲 bbox）と各データセットの `source` を書き換える
-   - 全国地方公共団体コードと bbox は、根拠（総務省のコード表、市域の範囲）を確かめてから書く。わからなければ利用者に聞く
+1. `cities/<市>.toml` がなければ、`cities/soka.toml` を写して `[city]`（slug・コード・都道府県・市名・ID の接頭辞）と各データセットの `source` を書き換える
+   - 全国地方公共団体コードは、元データのファイル名（「112038_aed.csv」）や「全国地方公共団体コード」の列など、根拠を確かめてから書く。わからなければ利用者に聞く。build のときに町字マスターと照らして確かめられる
+   - 市の範囲 `bbox` は `"auto"` のままにする（元データの座標から自動で決まる）。座標の数値を書かない
 2. 元データを置く（`python -m odkit fetch cities/<市>.toml`、または手で `sources/<市>/` に保存）
 3. `python -m odkit inspect cities/<市>.toml` を実行し、`work/<市>/inspect.json` を読む
    - `standard_columns`：書き出す標準の項目

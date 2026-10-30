@@ -56,6 +56,11 @@ python -m odkit build cities/soka.toml
 
 ### 新しい市を追加する
 
+Claude Code でこのリポジトリを開き、`/odkit-add-city 〇〇市` と頼むと、下の 1〜4 を AI が通しで進めます（人の確認が要るものだけが残ります）。ほかのコーディングエージェントに任せるときは [docs/prompt.md](docs/prompt.md) のプロンプトを使えます。
+
+手で進める場合：
+
+
 1. 埼玉県内の市町村なら、県のオープンデータポータルから候補を自動で探せる
    ```bash
    python -m odkit discover 川口市 --slug kawaguchi
