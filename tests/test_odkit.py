@@ -95,6 +95,7 @@ class TestTownMaster(unittest.TestCase):
         self.assertEqual(self.split("埼玉県川口市赤井1-2-3"), ("赤井1丁目", "2-3", "", "0024001"))
         self.assertEqual(self.split("埼玉県川口市赤井525‐1"), ("大字赤井", "525-1", "", "0090000"))  # 丁目にない番号→同名の大字
         self.assertEqual(self.split("埼玉県川口市赤井1-2地内"), ("赤井1丁目", "2地内", "", "0024001"))
+        self.assertEqual(self.split("埼玉県川口市大字神戸70-1、74-9"), ("大字神戸", "70-1、74-9", "", "0093000"))
         self.assertIsNone(self.split("埼玉県川口市青木9-1-1"))   # 存在しない丁目
         self.assertIsNone(self.split("埼玉県川口市存在しない町1-1"))
 
@@ -135,6 +136,9 @@ class TestClean(unittest.TestCase):
         self.assertEqual(r["所在地_連結表記"], "埼玉県川口市西川口5丁目2-1")
         self.assertEqual((r["文化財指定日"], r["開始時間"]), ("2018-12-25", "09:00"))
         self.assertEqual((r["電話番号"], r["連絡先電話番号"]), ("048-259-7651", "048-285-2424"))
+        r = {"所在地_連結表記": "埼玉県川口市千葉県富津市千種新田755-1"}
+        clean_row(r, "埼玉県", "川口市")
+        self.assertEqual(r["所在地_連結表記"], "千葉県富津市千種新田755-1")
 
 
 class TestDiscover(unittest.TestCase):

@@ -125,7 +125,7 @@ class TownMaster:
         after = after.lstrip("-")
         if after in NO_NUMBER or not after:
             return {"所在地_町字": town, "所在地_番地以下": after, "建物名等": "", "町字ID": town_id}
-        m = re.fullmatch(r"(\d+(?:-\d+)*)(.*)", after)
+        m = re.fullmatch(r"(\d+(?:-\d+)*(?:[、,]\d+(?:-\d+)*)*)(.*)", after)  # 「70-1、74-9」「14,15」もそのまま番地以下に
         if not m:
             return None
         num, bldg = m.group(1), m.group(2).strip()

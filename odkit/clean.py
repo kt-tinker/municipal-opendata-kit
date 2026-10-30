@@ -19,7 +19,7 @@ from __future__ import annotations
 import datetime as dt
 import re
 
-from .normalize import HYPHENS, nfkc, normalize_phone
+from .normalize import HYPHENS, PREFECTURE_RE, nfkc, normalize_phone
 
 DATE_COLUMNS = ("文化財指定日",)
 TIME_COLUMNS = ("開始時間", "終了時間")
@@ -76,6 +76,9 @@ def clean_row(r: dict, prefecture: str, city: str) -> list[tuple[str, str, str, 
             fix(col, NUMBER_HYPHEN.sub("-", nfkc(r[col])), "全角・半角の表記ゆれを統一")
     if r.get("所在地_連結表記"):
         fix("所在地_連結表記", NUMBER_HYPHEN.sub("-", nfkc(r["所在地_連結表記"])), "全角・半角の表記ゆれを統一")
+        rest = r["所在地_連結表記"][len(prefecture + city):] if r["所在地_連結表記"].startswith(prefecture + city) else ""
+        if PREFECTURE_RE.match(rest) and not rest.startswith(prefecture + city):
+            fix("所在地_連結表記", rest, "市外の住所の前に市の名前が付いていた")
         for dup in (prefecture + city + city, prefecture + city + prefecture + city):
             if r["所在地_連結表記"].startswith(dup):
                 fix("所在地_連結表記", prefecture + city + r["所在地_連結表記"][len(dup):], "住所の市区町村名が重複していた")

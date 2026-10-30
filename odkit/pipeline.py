@@ -201,6 +201,11 @@ class Pipeline:
                 r[col] = normalize_phone(r[col])
 
         item_base = f"{key}:{r['ID']}"
+        # 1つのセルに複数の所在地（改行区切り）→ 1つ目を採り、残りは備考に残す
+        places = [x.strip() for x in re.split(r"[\r\n]+", r["所在地_連結表記"]) if x.strip()]
+        if len(places) > 1:
+            notes.append(f"元データに複数の所在地があったため1つ目を採用（ほかの所在地：{'、'.join(places[1:])}）")
+            r["所在地_連結表記"] = places[0]
         self.fill_address(r, bcol, item_base, fix)
         precision = self.fill_coords(key, ds, r, notes, item_base)
         r.pop("_outside", None)
@@ -222,8 +227,17 @@ class Pipeline:
                     if hit[0] != nfkc(r["所在地_町字"]):
                         fix("所在地_町字", hit[0], "町字の表記を町字マスターに合わせた（丁目の補完など）")
                     r["町字ID"] = hit[1]
+                    return
+                # 「青木」「5-21-1」のように丁目が番地以下の側に入っている → 連結表記から分け直す
+                again = tm.split(r["所在地_連結表記"], self.pref, self.name)
+                if again and again["町字ID"]:
+                    fix("所在地_町字", again["所在地_町字"], "町字マスターに合わせて町字と番地以下を分け直した")
+                    fix("所在地_番地以下", again["所在地_番地以下"], "町字マスターに合わせて町字と番地以下を分け直した")
+                    r["町字ID"] = again["町字ID"]
             return
         rest = strip_city(canonical_address(r["所在地_連結表記"]), self.pref, self.name)
+        if not rest:
+            return  # 市の名前だけで、分けるものがない（位置は確認リストで扱う）
         split = tm.split(r["所在地_連結表記"], self.pref, self.name) if tm else split_address(r["所在地_連結表記"], self.pref, self.name)
         item_id = f"{item_base}:address_split"
         if split is None:
@@ -281,6 +295,11 @@ class Pipeline:
             r["緯度"], r["経度"] = str(lat), str(lon)
             self.stats[key].had_coords += 1
             return "source"
+        if r["緯度"] or r["経度"]:
+            notes.append(f"元データの緯度経度（{r['緯度']}, {r['経度']}）は市の範囲外のため使わず、付け直した")
+            self.fixes.append({"dataset": key, "id": r["ID"], "column": "緯度・経度",
+                               "before": f"{r['緯度']}, {r['経度']}", "after": "（付け直し）",
+                               "why": "元データの緯度経度が市の範囲外（入力の誤りとみられる）"})
         r["緯度"] = r["経度"] = ""
 
         # 1) 公共施設情報の同名施設から転記
@@ -300,7 +319,7 @@ class Pipeline:
         query = r["所在地_連結表記"]
         if self.town_master and r.get("町字ID") and r["所在地_町字"]:
             # 町字マスターで丁目を確かめた住所で検索する（「青木2-1-1」→「青木2丁目1-1」）
-            num = r["所在地_番地以下"] if re.match(r"\d", r["所在地_番地以下"]) else ""
+            num = re.match(r"[\d-]*", r["所在地_番地以下"]).group(0).rstrip("-")  # 「18、19」「6-9地内」は最初の番地まで
             query = self.pref + self.name + r["所在地_町字"] + num
         if d and d["action"] == "use_reference":
             hit = self.reference_index.get(self.ref_key(d.get("name", "")))
