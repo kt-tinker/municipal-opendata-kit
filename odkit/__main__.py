@@ -74,6 +74,8 @@ def cmd_inspect(cfg: dict) -> None:
 
 def cmd_build(cfg: dict, offline: bool) -> int:
     p = Pipeline(cfg, offline=offline)
+    todo = len(p.geocoder.cache)
+    print(f"build を始めます（住所検索のキャッシュ {todo}件。新しい住所は1件1秒ほどかけて検索します）")
     summary = p.run()
     readme = write_readme(cfg, summary, p.out)
     print(f"出力: {p.out}")
@@ -84,6 +86,8 @@ def cmd_build(cfg: dict, offline: bool) -> int:
         print(f"  市外の施設: {len(summary['outside'])}件（範囲チェックの対象外）")
     if not summary["town_master"]:
         print("  町字マスターなし：住所の分け方は簡易な規則による（fetch で取得すると町字IDも付きます）")
+    if summary["geocoder_failed"]:
+        print(f"  住所検索に失敗: {summary['geocoder_failed']}件 → 時間をおいてもう一度 build すると、続きから検索します")
     print(f"  判断を反映: {summary['review_applied']}件 / 確認待ち: {summary['review_pending']}件")
     if summary["review_pending"]:
         print(f"  → Claude Code で /odkit-review を実行してください（{p.work / 'review' / 'queue.json'}）")

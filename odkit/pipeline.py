@@ -325,7 +325,8 @@ class Pipeline:
             return "none"
         results = self.geocoder.search(query)
         if results is None:
-            self.review.ask(item_id, "geocode", {"name": r["名称"], "address": r["所在地_連結表記"], "searched": query, "note": "オフラインのため未検索"})
+            note = "オフラインのため未検索" if self.geocoder.offline else "住所検索に失敗したため未検索（次の build で再検索）"
+            self.review.ask(item_id, "geocode", {"name": r["名称"], "address": r["所在地_連結表記"], "searched": query, "note": note})
             return "none"
         best, p = geo.best_match(results, query, self.pref, self.name)
         if best and p in ("address", "block") and valid_coord(best["lat"], best["lon"], bbox):
@@ -450,11 +451,13 @@ class Pipeline:
         if ref in order:  # 転記元を先に作る
             order.remove(ref)
             order.insert(0, ref)
-        for key in order:
-            rows = self.run_dataset(key, datasets[key])
-            if key == ref:
-                self.reference_index = {self.ref_key(x["名称"]): x for x in rows if x["緯度"]}
-        self.geocoder.save()
+        try:
+            for key in order:
+                rows = self.run_dataset(key, datasets[key])
+                if key == ref:
+                    self.reference_index = {self.ref_key(x["名称"]): x for x in rows if x["緯度"]}
+        finally:
+            self.geocoder.save()  # Ctrl+C やエラーで止まっても、そこまでの検索結果は残す
         self.review.save()
         summary = {
             "city": self.city["name"],
@@ -466,6 +469,7 @@ class Pipeline:
             "outside": self.outside,
             "town_master": bool(self.town_master),
             "geocoder_live_calls": self.geocoder.live_calls,
+            "geocoder_failed": self.geocoder.failed,
         }
         (self.work / "summary.json").write_text(json.dumps(summary, ensure_ascii=False, indent=1), "utf-8")
         return summary

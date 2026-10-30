@@ -50,6 +50,26 @@ class TestNormalize(unittest.TestCase):
         self.assertEqual(j("埼玉県八潮市中央一丁目"), "none")
 
 
+class TestGeocoderFailure(unittest.TestCase):
+    """住所検索が応答しなくても build 全体は止めず、そこまでの結果を残す。"""
+
+    def test_timeout_does_not_stop(self):
+        import tempfile
+        from unittest import mock
+        with tempfile.TemporaryDirectory() as tmp:
+            g = geo.Geocoder(Path(tmp) / "cache.json", interval=0, log=lambda *_: None)
+            g.cache["埼玉県川口市青木2丁目1-1"] = []
+            with mock.patch.object(geo.Geocoder, "RETRY_WAITS", (0,)), \
+                 mock.patch("urllib.request.urlopen", side_effect=TimeoutError("timed out")):
+                self.assertIsNone(g.search("埼玉県川口市芝下1丁目11"))
+                self.assertIsNone(g.search("埼玉県川口市芝1丁目1"))
+                self.assertIsNone(g.search("埼玉県川口市並木2丁目1"))
+                self.assertTrue(g.gave_up)          # 3件続けて失敗 → 残りは検索しない
+                self.assertEqual(g.search("埼玉県川口市青木2丁目1-1"), [])  # キャッシュは使える
+            self.assertEqual(g.failed, 3)
+            self.assertTrue((Path(tmp) / "cache.json").exists())
+
+
 class TestTownMaster(unittest.TestCase):
     """町字マスター（アドレス・ベース・レジストリ）で丁目を判定する。fixtures は川口市の町字マスターの抜粋。"""
 
