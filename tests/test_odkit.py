@@ -266,6 +266,18 @@ class TestKawaguchiStyle(unittest.TestCase):
 
 
 class TestSaitamaStyle(unittest.TestCase):
+    def test_split_wards(self):
+        from odkit.townmaster import TownMaster
+        tm = TownMaster.load(TESTS / "fixtures/saitama/mt_town_wards_excerpt.csv")
+        sp = lambda a: (lambda x: x and (x["区"], x["所在地_町字"], x["所在地_番地以下"], x["町字ID"]))(tm.split(a, "埼玉県", "さいたま市"))
+        self.assertEqual(sp("埼玉県さいたま市北区土呂町352番"), ("北区", "土呂町", "352", "0008000"))      # 丁目にない番号
+        self.assertEqual(sp("埼玉県さいたま市北区土呂町1-51-8"), ("北区", "土呂町1丁目", "51-8", "0008001"))
+        self.assertIsNone(sp("埼玉県さいたま市北区土呂町1-42"))                                          # 丁目か番地か決められない
+        self.assertEqual(sp("埼玉県さいたま市西区大字飯田新田字荒工250-15"), ("西区", "大字飯田新田", "字荒工250-15", "0019000"))
+        self.assertEqual(sp("埼玉県さいたま市浦和区大字高砂4丁目3-18"), ("浦和区", "高砂4丁目", "3-18", "0004004"))
+        self.assertEqual(sp("埼玉県さいたま市浦和区東高砂町無番地"), ("浦和区", "東高砂町", "無番地", "0016000"))
+        self.assertIsNone(sp("埼玉県さいたま市高砂4丁目3-18"))  # 区がない
+
     """政令指定都市（区ごとの団体コード・町字マスター）と、独自形式の列のデータ（さいたま市の形）。"""
 
     def test_build(self):

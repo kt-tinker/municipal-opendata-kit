@@ -355,7 +355,7 @@ class Pipeline:
         query = r["所在地_連結表記"]
         if self.town_master and r.get("町字ID") and r["所在地_町字"]:
             # 町字マスターで丁目を確かめた住所で検索する（「青木2-1-1」→「青木2丁目1-1」）
-            num = re.match(r"[\d-]*", r["所在地_番地以下"]).group(0).rstrip("-")  # 「18、19」「6-9地内」は最初の番地まで
+            num = re.match(r"[\d-]*", re.sub(r"^字[^\d]+", "", r["所在地_番地以下"])).group(0).rstrip("-")  # 「18、19」「6-9地内」は最初の番地まで
             query = self.pref + self.name + r.get("_ward", "") + r["所在地_町字"] + num
         if d and d["action"] == "use_reference":
             hit = self.reference_index.get(self.ref_key(d.get("name", "")))

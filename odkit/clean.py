@@ -82,6 +82,8 @@ def clean_row(r: dict, prefecture: str, city: str, wards: tuple = ()) -> list[tu
         rest = r["所在地_連結表記"][len(prefecture + city):] if r["所在地_連結表記"].startswith(prefecture + city) else ""
         if PREFECTURE_RE.match(rest) and not rest.startswith(prefecture + city):
             fix("所在地_連結表記", rest, "市外の住所の前に市の名前が付いていた")
+        if re.search(r"地内番$", r["所在地_連結表記"]):  # 「上木崎1丁目地内番」
+            fix("所在地_連結表記", r["所在地_連結表記"][:-1], "住所の末尾の不要な「番」を削除")
         for dup in (prefecture + city + city, prefecture + city + prefecture + city):
             if r["所在地_連結表記"].startswith(dup):
                 fix("所在地_連結表記", prefecture + city + r["所在地_連結表記"][len(dup):], "住所の市区町村名が重複していた")

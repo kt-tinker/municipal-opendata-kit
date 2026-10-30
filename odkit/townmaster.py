@@ -24,7 +24,7 @@ from .normalize import canonical_address, nfkc, strip_city
 
 URL = "https://data.address-br.digital.go.jp/mt_town/city/mt_town_city{code}.csv.zip"
 PAGE = "https://dataset.address-br.digital.go.jp/"
-NO_NUMBER = ("地内", "付近", "地先")
+NO_NUMBER = ("地内", "付近", "地先", "無番地")
 OTHERS = ("他", "外", "ほか")  # 「大字田島他」「太田3-4ほか」
 
 
@@ -91,6 +91,8 @@ class _Towns:
 
     def split_rest(self, rest: str) -> dict | None:
         alias = next((a for a in self.lookup_order if rest.startswith(a)), None)
+        if alias is None and rest.startswith("大字"):  # 「大字美園4丁目」のように、大字の付かない町に大字が付いている
+            return self.split_rest(rest[2:])
         if alias is None:
             return None
         entry = self.oaza[self.alias[alias]]
@@ -104,7 +106,14 @@ class _Towns:
                 entry = oaza_variant
         town, town_id = entry["name"], entry["id"]
         if entry["chome"] and entry["id"] and not re.match(r"\d+丁目", after):
-            return None  # 丁目のある区域とない区域が混在する町：「12-3」が丁目か番地か決められない
+            # 丁目のある区域とない区域が混在する町（さいたま市の土呂町・島町）：
+            # 最初の番号が丁目にない（「土呂町352」）→ 丁目のない区域の番地。
+            # 「1-51-8」のように3つ続く → 丁目＋番地。「1-42」は決められない
+            m = re.match(r"(\d+)", after)
+            if m and int(m.group(1)) not in entry["chome"]:
+                entry = {**entry, "chome": {}}
+            elif not re.match(r"\d+-\d+-\d+", after):
+                return None
         if entry["chome"]:
             m = re.match(r"(\d+)(?:丁目-?|-|(?=\D)|$)", after)
             if m:
@@ -118,6 +127,9 @@ class _Towns:
         elif re.match(r"\d+丁目", after):
             return None  # 丁目のない町に丁目が書かれている
         after = after.lstrip("-")
+        # 町字マスターにない小字（「字木畔511」「字中島地内」）は番地以下に含める
+        if re.fullmatch(r"字[^\d、,・()（）]+?(\d+(?:-\d+)*)?(地内|他|外|ほか)?", after):
+            return {"所在地_町字": town, "所在地_番地以下": after, "建物名等": "", "町字ID": town_id}
         if after in NO_NUMBER or after in OTHERS or not after:
             return {"所在地_町字": town, "所在地_番地以下": after, "建物名等": "", "町字ID": town_id}
         m = re.fullmatch(r"(\d+(?:-\d+)*(?:[、,]\d+(?:-\d+)*)*)(.*)", after)  # 「70-1、74-9」「14,15」もそのまま番地以下に
