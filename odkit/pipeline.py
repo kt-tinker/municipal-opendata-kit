@@ -510,7 +510,7 @@ class Pipeline:
         """市の範囲（範囲チェック用）を元データの座標から決める。AI や人が座標の数値を書かなくてよいように。
 
         全データセットの元の座標の中央値から 0.2 度（約20km）以上離れたもの（市外の施設・入力の誤り）を除き、
-        残りの最小・最大に 0.01 度（約1km）の余白を足す。座標が20件未満なら決めない。
+        残りの最小・最大に 0.02 度（約2km）の余白を足す。座標が20件未満なら決めない。
         """
         pts = []
         for key, ds in self.cfg["datasets"].items():
@@ -527,7 +527,7 @@ class Pipeline:
         mid = lambda xs: sorted(xs)[len(xs) // 2]
         mlat, mlon = mid([a for a, _ in pts]), mid([b for _, b in pts])
         near = [(a, b) for a, b in pts if abs(a - mlat) < 0.2 and abs(b - mlon) < 0.2]
-        m = 0.01
+        m = 0.02
         return [round(min(a for a, _ in near) - m, 4), round(min(b for _, b in near) - m, 4),
                 round(max(a for a, _ in near) + m, 4), round(max(b for _, b in near) + m, 4)]
 
