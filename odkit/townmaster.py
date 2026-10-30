@@ -7,6 +7,7 @@
 - 町字マスターにある町字だけを使う。見つからなければ None を返し、確認リスト（AI／人）に回す
 - 「大字」は付けても省いてもよい（「赤山1143」→ 町字「大字赤山」）
 - 似た町名（「芝」「芝下」「芝園町」）は長いほうから照らす
+- 政令指定都市（さいたま市）は区ごとに町字マスターが分かれている。住所の区の名前で使うマスターを選ぶ
 
 データ：https://dataset.address-br.digital.go.jp/ （市区町村ごとの mt_town_city<コード>.csv.zip）
 """
@@ -24,6 +25,7 @@ from .normalize import canonical_address, nfkc, strip_city
 URL = "https://data.address-br.digital.go.jp/mt_town/city/mt_town_city{code}.csv.zip"
 PAGE = "https://dataset.address-br.digital.go.jp/"
 NO_NUMBER = ("地内", "付近", "地先")
+OTHERS = ("他", "外", "ほか")  # 「大字田島他」「太田3-4ほか」
 
 
 def _key(s: str) -> str:
@@ -38,7 +40,9 @@ def compare_key(s: str) -> str:
     return t.rstrip("-").replace("-地内", "地内")
 
 
-class TownMaster:
+class _Towns:
+    """1つの市区町村（政令指定都市なら1つの区）の町字。"""
+
     def __init__(self, rows: list[dict]):
         self.oaza: dict[str, dict] = {}  # 照合用の名前 → {"name", "id"(丁目なしの町のID), "chome": {番号: (町字, ID)}}
         self.names: dict[str, str] = {}  # 町字（正式な表記）の照合用キー → 町字ID
@@ -60,14 +64,6 @@ class TownMaster:
             if k.startswith("大字") and k[2:] not in self.alias:
                 self.alias[k[2:]] = k
         self.lookup_order = sorted(self.alias, key=len, reverse=True)
-
-    @classmethod
-    def load(cls, path: Path) -> "TownMaster":
-        data = path.read_bytes()
-        if path.suffix == ".zip":
-            with zipfile.ZipFile(io.BytesIO(data)) as z:
-                data = z.read(next(n for n in z.namelist() if n.endswith(".csv")))
-        return cls(list(csv.DictReader(io.StringIO(data.decode("utf-8-sig")))))
 
     def town_id(self, town: str) -> tuple[str, str] | None:
         """町字の表記から (正式な町字, 町字ID)。「大沢3」のように丁目を省いたものも照らす。"""
@@ -93,9 +89,7 @@ class TownMaster:
                     return town
         return key
 
-    def split(self, address: str, prefecture: str, city: str) -> dict | None:
-        """住所 → {所在地_町字, 所在地_番地以下, 建物名等, 町字ID}。決められなければ None。"""
-        rest = _key(strip_city(canonical_address(address), prefecture, city))
+    def split_rest(self, rest: str) -> dict | None:
         alias = next((a for a in self.lookup_order if rest.startswith(a)), None)
         if alias is None:
             return None
@@ -124,14 +118,59 @@ class TownMaster:
         elif re.match(r"\d+丁目", after):
             return None  # 丁目のない町に丁目が書かれている
         after = after.lstrip("-")
-        if after in NO_NUMBER or not after:
+        if after in NO_NUMBER or after in OTHERS or not after:
             return {"所在地_町字": town, "所在地_番地以下": after, "建物名等": "", "町字ID": town_id}
         m = re.fullmatch(r"(\d+(?:-\d+)*(?:[、,]\d+(?:-\d+)*)*)(.*)", after)  # 「70-1、74-9」「14,15」もそのまま番地以下に
         if not m:
             return None
         num, bldg = m.group(1), m.group(2).strip()
-        if bldg in ("番", "他", "外", "号") or bldg in NO_NUMBER:  # 「6-9地内」「238 地先」
+        if bldg in ("番", "号") or bldg in OTHERS or bldg in NO_NUMBER:  # 「6-9地内」「238 地先」
             num, bldg = num + bldg, ""
         elif bldg and re.match(r"[-\d、,]", bldg):
             return None
         return {"所在地_町字": town, "所在地_番地以下": num, "建物名等": bldg, "町字ID": town_id}
+
+
+class TownMaster:
+    """町字マスター。政令指定都市は区ごとのマスターをまとめて持ち、住所の区の名前で使い分ける。"""
+
+    def __init__(self, rows: list[dict]):
+        groups: dict[str, list[dict]] = {}
+        for r in rows:
+            groups.setdefault(nfkc(r.get("ward", "")), []).append(r)
+        self.parts = {ward: _Towns(rs) for ward, rs in groups.items()}
+        self.wards = sorted((w for w in self.parts if w), key=len, reverse=True)
+
+    @staticmethod
+    def read(path: Path) -> list[dict]:
+        data = path.read_bytes()
+        if path.suffix == ".zip":
+            with zipfile.ZipFile(io.BytesIO(data)) as z:
+                data = z.read(next(n for n in z.namelist() if n.endswith(".csv")))
+        return list(csv.DictReader(io.StringIO(data.decode("utf-8-sig"))))
+
+    @classmethod
+    def load(cls, paths) -> "TownMaster":
+        paths = [paths] if isinstance(paths, Path) else list(paths)
+        return cls([row for p in paths for row in cls.read(p)])
+
+    def ward_of(self, rest: str) -> tuple[str, str]:
+        """市より後ろの住所 → (区, 区より後ろ)。区のない市なら ("", そのまま)。"""
+        for w in self.wards:
+            if rest.startswith(w):
+                return w, rest[len(w):]
+        return "", rest
+
+    def split(self, address: str, prefecture: str, city: str) -> dict | None:
+        """住所 → {所在地_町字, 所在地_番地以下, 建物名等, 町字ID, 区}。決められなければ None。"""
+        rest = _key(strip_city(canonical_address(address), prefecture, city))
+        ward, rest = self.ward_of(rest)
+        part = self.parts.get(ward)
+        if part is None:
+            return None  # 区の名前がない（政令指定都市で区がわからない）
+        out = part.split_rest(rest)
+        return out and {**out, "区": ward}
+
+    def town_id(self, town: str, ward: str = "") -> tuple[str, str] | None:
+        part = self.parts.get(ward)
+        return part.town_id(town) if part else None

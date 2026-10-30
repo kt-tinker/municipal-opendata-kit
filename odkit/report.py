@@ -35,7 +35,8 @@ def write_readme(cfg: dict, summary: dict, out_dir: Path) -> Path:
     ]
     for ds in cfg["datasets"].values():
         page = ds.get("page", "")
-        lines.append(f"- {ds.get('title', ds['standard'])} {page}".rstrip())
+        lic = f"（{ds['license']}）" if ds.get("license") else ""
+        lines.append(f"- {ds.get('title', ds['standard'])}{lic} {page}".rstrip())
     if summary.get("town_master"):
         lines.append(f"- 町字・町字ID：デジタル庁「アドレス・ベース・レジストリ」町字マスター（{city['name']}）https://dataset.address-br.digital.go.jp/ を加工して作成")
     lines += [

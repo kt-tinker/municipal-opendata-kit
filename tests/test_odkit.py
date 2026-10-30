@@ -265,5 +265,37 @@ class TestKawaguchiStyle(unittest.TestCase):
         self.assertEqual(q["public_facility:k120000001:geocode"]["context"]["searched"], "埼玉県川口市青木2丁目1-1")
 
 
+class TestSaitamaStyle(unittest.TestCase):
+    """政令指定都市（区ごとの団体コード・町字マスター）と、独自形式の列のデータ（さいたま市の形）。"""
+
+    def test_build(self):
+        for d in ("work/saitama-test", "output/saitama-test"):
+            shutil.rmtree(TESTS / d, ignore_errors=True)
+        s = Pipeline(load_config(TESTS / "cities/saitama-test.toml"), offline=True).run()
+
+        def rows(ds):
+            with open(TESTS / f"output/saitama-test/111007_{ds}.csv", encoding="utf-8-sig", newline="") as f:
+                return list(csv.DictReader(f))
+
+        fac = rows("public_facility")[0]
+        self.assertEqual((fac["所在地_市区町村"], fac["所在地_全国地方公共団体コード"]), ("さいたま市浦和区", "111074"))
+        self.assertEqual((fac["所在地_町字"], fac["所在地_番地以下"], fac["町字ID"]), ("東高砂町", "11-1", "0016000"))
+        self.assertEqual(fac["開始時間"], "09:00")
+        aed = rows("aed")
+        self.assertEqual(aed[0]["所在地_連結表記"], "埼玉県さいたま市西区飯田新田189-2 馬宮西小学校内")  # 区の列を補った
+        self.assertEqual((aed[0]["所在地_町字"], aed[0]["所在地_番地以下"], aed[0]["建物名等(方書)"], aed[0]["町字ID"]),
+                         ("大字飯田新田", "189-2", "馬宮西小学校内", "0019000"))
+        self.assertEqual((aed[0]["所在地_市区町村"], aed[0]["所在地_全国地方公共団体コード"]), ("さいたま市西区", "111015"))
+        self.assertEqual(aed[1]["所在地_連結表記"], "群馬県利根郡みなかみ町相俣159-1")  # 「市外」は区を補わない
+        cul = rows("cultural_property")
+        self.assertEqual((cul[0]["所在地_町字"], cul[0]["所在地_番地以下"]), ("大字田島", "他"))
+        self.assertEqual((cul[1]["所在地_町字"], cul[1]["所在地_番地以下"], cul[1]["町字ID"]), ("高砂4丁目", "3-18", "0004004"))
+        ev = rows("evacuation_space")[0]
+        self.assertEqual((ev["災害種別_地震"], ev["災害種別_洪水"], ev["災害種別_大規模な火事"], ev["指定避難所との重複"]), ("1", "1", "", "1"))
+        self.assertIn("災害種別_洪水：2F以上", ev["備考"])
+        self.assertEqual((ev["所在地_町字"], ev["町字ID"]), ("西大宮1丁目", "0031001"))
+        self.assertEqual(len(s["outside"]), 2)
+
+
 if __name__ == "__main__":
     unittest.main()

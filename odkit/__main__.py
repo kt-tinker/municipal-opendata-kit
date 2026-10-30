@@ -35,12 +35,12 @@ def cmd_fetch(cfg: dict) -> None:
             print(f"[{key}] 取得しました: {dest}")
     if cfg["city"].get("town_master", True) is True:
         from .townmaster import URL
-        dest = p.town_master_path
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        req = urllib.request.Request(URL.format(code=cfg["city"]["code"]), headers={"User-Agent": "municipal-opendata-kit"})
-        with urllib.request.urlopen(req, timeout=60) as res:
-            dest.write_bytes(res.read())
-        print(f"[町字マスター] 取得しました: {dest}")
+        for code, dest in zip(p.town_master_codes, p.town_master_paths):
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            req = urllib.request.Request(URL.format(code=code), headers={"User-Agent": "municipal-opendata-kit"})
+            with urllib.request.urlopen(req, timeout=60) as res:
+                dest.write_bytes(res.read())
+            print(f"[町字マスター] 取得しました: {dest}")
 
 
 def cmd_inspect(cfg: dict) -> None:

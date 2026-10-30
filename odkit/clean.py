@@ -45,7 +45,7 @@ def fraction_to_time(v: str) -> str | None:
     return None
 
 
-def clean_row(r: dict, prefecture: str, city: str) -> list[tuple[str, str, str, str]]:
+def clean_row(r: dict, prefecture: str, city: str, wards: tuple = ()) -> list[tuple[str, str, str, str]]:
     fixes = []
 
     def fix(col: str, new: str, why: str) -> None:
@@ -69,8 +69,11 @@ def clean_row(r: dict, prefecture: str, city: str) -> list[tuple[str, str, str, 
             m = re.fullmatch(r"(\d{1,2})[:：](\d{2})", nfkc(r[col]))
             if m:
                 fix(col, f"{int(m.group(1)):02d}:{m.group(2)}", "時刻をHH:MMの形に統一")
-    if r.get("所在地_市区町村") and r["所在地_市区町村"] != city and nfkc(r["所在地_市区町村"]).startswith(city):
-        fix("所在地_市区町村", city, "市区町村の欄に住所全体が入っていた")
+    v = nfkc(r.get("所在地_市区町村", ""))
+    if v and v.startswith(city):
+        ward = next((w for w in sorted(wards, key=len, reverse=True) if v[len(city):].startswith(w)), "")
+        if v != city + ward:  # 政令指定都市は「さいたま市浦和区」まで
+            fix("所在地_市区町村", city + ward, "市区町村の欄に住所全体が入っていた")
     for col in ("所在地_町字", "所在地_番地以下"):
         if r.get(col):
             fix(col, NUMBER_HYPHEN.sub("-", nfkc(r[col])), "全角・半角の表記ゆれを統一")

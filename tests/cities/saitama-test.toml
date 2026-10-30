@@ -1,0 +1,78 @@
+# テスト用：さいたま市（政令指定都市・区ごとの町字マスター・独自形式の AED／避難場所）の一部データ
+standard_version = "2026-08-01"
+
+[city]
+slug = "saitama-test"
+code = "111007"
+prefecture = "埼玉県"
+name = "さいたま市"
+id_prefix = "SAITAMA"
+bbox = [35.80, 139.53, 36.02, 139.78]
+license = "公共データ利用規約 第1.0版（PDL1.0）"
+town_master = "fixtures/saitama/mt_town_wards_excerpt.csv"
+
+[city.wards]
+"西区" = "111015"
+"北区" = "111023"
+"大宮区" = "111031"
+"見沼区" = "111040"
+"中央区" = "111058"
+"桜区" = "111066"
+"浦和区" = "111074"
+"南区" = "111082"
+"緑区" = "111091"
+"岩槻区" = "111104"
+
+[reference]
+dataset = "public_facility"
+title = "公共施設の位置情報（緯度経度）一覧"
+name_strip = ["さいたま市立", "さいたま市"]
+
+[datasets.public_facility]
+standard = "public_facility"
+source = "fixtures/saitama/public_facility.csv"
+id_code = "FAC"
+passthrough = true
+
+[datasets.aed]
+standard = "aed"
+source = "fixtures/saitama/aed.csv"
+id_code = "AED"
+license = "CC BY"
+ward_column = "区"
+[datasets.aed.columns]
+"名称" = "施設名等"
+"設置位置" = "設置場所"
+"所在地_連結表記" = "所在地"
+"緯度" = "緯度"
+"経度" = "経度"
+
+[datasets.cultural_property]
+standard = "cultural_property"
+source = "fixtures/saitama/cultural_property.csv"
+id_code = "CUL"
+[datasets.cultural_property.columns]
+"名称" = "名称"
+"文化財分類" = "指定"
+"種類" = "種別"
+"所在地_連結表記" = "住所（所在地）"
+"所有者等" = "保存団体"
+"緯度" = "緯度"
+"経度" = "経度"
+
+[datasets.evacuation_space]
+standard = "evacuation_space"
+source = "fixtures/saitama/evacuation_space.csv"
+id_code = "EVA"
+flags = ["災害種別_地震", "災害種別_洪水", "災害種別_崖崩れ、土石流及び地滑り", "災害種別_大規模な火事", "指定避難所との重複"]
+[datasets.evacuation_space.columns]
+"名称" = "施設等の名称"
+"名称_カナ" = "読み"
+"所在地_連結表記" = "住所"
+"緯度" = "緯度"
+"経度" = "経度"
+"災害種別_地震" = "地震"
+"災害種別_洪水" = "洪水"
+"災害種別_崖崩れ、土石流及び地滑り" = "崖崩れ"
+"災害種別_大規模な火事" = "大規模な火事"
+"指定避難所との重複" = "指定避難所との重複"

@@ -73,6 +73,7 @@ python -m odkit build cities/soka.toml
 | 埼玉県草加市 | `cities/soka.toml` | 独自形式。AED・避難場所に位置なし |
 | 埼玉県越谷市 | `cities/koshigaya.toml` | 多くは標準形式だが表記の崩れあり。AED は施設名だけ（住所・位置なし） |
 | 埼玉県川口市 | `cities/kawaguchi.toml` | 5種類とも標準形式（市のサイトで公開）。住所は丁目を省いた形、公共施設一覧に位置なし、市外の施設あり |
+| 埼玉県さいたま市 | `cities/saitama.toml` | 政令指定都市（区ごとの団体コード・町字マスター）。AED・避難場所は独自形式、文化財は市所有分のみ CSV、観光施設なし |
 
 ## 草加市での結果
 

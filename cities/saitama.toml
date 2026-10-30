@@ -1,0 +1,106 @@
+# 埼玉県さいたま市の設定（4番目の適用例・政令指定都市）
+# 県のポータル（組織ID 25）に公開されているもの。2026年10月30日に確認。
+# - 公共施設：標準形式（以前の版の列名）・Shift_JIS・座標あり。市区町村は「さいたま市浦和区」
+# - AED：独自形式（施設名等・設置場所・区・所在地・緯度・経度）。所在地に市・区の名前がなく、区は別の列。
+#        ライセンスは CC BY（ほかは公共データ利用規約）
+# - 文化財：CSV は「市所有文化財」のみ（96件）。全件の一覧は PDF のため対象外
+# - 指定緊急避難場所：独自形式。災害種別は「可」「不可」「2F以上」で書かれている
+# - 観光施設：ポータルに見当たらない
+# 政令指定都市なので、所在地の市区町村・団体コード・町字マスターは区ごと（[city.wards]）。
+#   python -m odkit fetch cities/saitama.toml
+#   python -m odkit build cities/saitama.toml
+
+standard_version = "2026-08-01"
+
+[city]
+slug = "saitama"
+code = "111007"
+prefecture = "埼玉県"
+name = "さいたま市"
+id_prefix = "SAITAMA"
+bbox = [35.80, 139.53, 36.02, 139.78]   # 範囲チェック用（市域を少し広めに囲む）[南端, 西端, 北端, 東端]
+license = "公共データ利用規約 第1.0版（PDL1.0）"
+
+[city.wards]   # 区の名前 = 全国地方公共団体コード
+"西区" = "111015"
+"北区" = "111023"
+"大宮区" = "111031"
+"見沼区" = "111040"
+"中央区" = "111058"
+"桜区" = "111066"
+"浦和区" = "111074"
+"南区" = "111082"
+"緑区" = "111091"
+"岩槻区" = "111104"
+
+[reference]
+dataset = "public_facility"
+title = "公共施設の位置情報（緯度経度）一覧"
+name_strip = ["さいたま市立", "さいたま市"]
+
+# ---------------- 公共施設（標準形式・座標あり） ----------------
+[datasets.public_facility]
+standard = "public_facility"
+title = "【さいたま市】公共施設の位置情報（緯度経度）一覧"
+page = "https://opendata.pref.saitama.lg.jp/datasets/1191"
+source = "https://opendata.pref.saitama.lg.jp/resource_download/4721"
+id_code = "FAC"
+passthrough = true
+
+# ---------------- AED（独自形式・座標あり・CC BY） ----------------
+[datasets.aed]
+standard = "aed"
+title = "【さいたま市】AED設置状況"
+page = "https://opendata.pref.saitama.lg.jp/datasets/1206"
+source = "https://opendata.pref.saitama.lg.jp/resource_download/4750"
+license = "クリエイティブ・コモンズ 表示"
+id_code = "AED"
+id_digits = 4
+ward_column = "区"   # 所在地に区の名前がないので、この列から補う（「市外」は補わない）
+
+[datasets.aed.columns]
+"名称" = "施設名等"
+"設置位置" = "設置場所"
+"所在地_連結表記" = "所在地"
+"緯度" = "緯度"
+"経度" = "経度"
+
+# ---------------- 文化財（市所有分のみ・独自形式・座標あり） ----------------
+[datasets.cultural_property]
+standard = "cultural_property"
+title = "【さいたま市】市所有文化財一覧（令和6年8月1日現在）"
+page = "https://opendata.pref.saitama.lg.jp/datasets/1196"
+source = "https://opendata.pref.saitama.lg.jp/resource_download/4726"
+id_code = "CUL"
+note = "市所有の文化財のみ（市内の文化財の全件一覧は PDF で公開）"
+
+[datasets.cultural_property.columns]
+"名称" = "名称"
+"文化財分類" = "指定"
+"種類" = "種別"
+"所在地_連結表記" = "住所（所在地）"
+"所有者等" = "保存団体"
+"緯度" = "緯度"
+"経度" = "経度"
+
+# ---------------- 指定緊急避難場所（独自形式・座標あり） ----------------
+[datasets.evacuation_space]
+standard = "evacuation_space"
+title = "【さいたま市】指定避難所・指定緊急避難場所一覧（指定緊急避難場所）"
+page = "https://opendata.pref.saitama.lg.jp/datasets/1209"
+source = "https://opendata.pref.saitama.lg.jp/resource_download/4758"
+id_code = "EVA"
+# 「可」「あり」→ 1、「不可」→ 空欄、「2F以上」などは 1 にして元の値を備考に残す
+flags = ["災害種別_地震", "災害種別_洪水", "災害種別_崖崩れ、土石流及び地滑り", "災害種別_大規模な火事", "指定避難所との重複"]
+
+[datasets.evacuation_space.columns]
+"名称" = "施設等の名称"
+"名称_カナ" = "読み"
+"所在地_連結表記" = "住所"
+"緯度" = "緯度"
+"経度" = "経度"
+"災害種別_地震" = "地震"
+"災害種別_洪水" = "洪水"
+"災害種別_崖崩れ、土石流及び地滑り" = "崖崩れ"
+"災害種別_大規模な火事" = "大規模な火事"
+"指定避難所との重複" = "指定避難所との重複"

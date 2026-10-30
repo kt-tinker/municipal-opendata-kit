@@ -103,17 +103,30 @@ class Pipeline:
         self.reference_index: dict[str, dict] = {}
         self.reference_cfg = cfg.get("reference", {})
         self.outside: list[dict] = []
+        # 政令指定都市の区：{"浦和区": "111074", ...}
+        self.wards: dict[str, str] = self.city.get("wards", {})
+        self.ward_order = sorted(self.wards, key=len, reverse=True)
         self.town_master = None
-        if self.town_master_path.exists():
-            self.town_master = TownMaster.load(self.town_master_path)
+        if self.town_master_paths and all(p.exists() for p in self.town_master_paths):
+            self.town_master = TownMaster.load(self.town_master_paths)
 
     @property
-    def town_master_path(self) -> Path:
-        """アドレス・ベース・レジストリの町字マスター（fetch で取得）。"""
+    def town_master_codes(self) -> list[str]:
+        return list(self.wards.values()) or [self.city["code"]]
+
+    @property
+    def town_master_paths(self) -> list[Path]:
+        """アドレス・ベース・レジストリの町字マスター（fetch で取得）。政令指定都市は区ごと。"""
         custom = self.city.get("town_master")
         if isinstance(custom, str):
-            return self.base / custom
-        return self.work / "abr" / f"mt_town_city{self.city['code']}.csv.zip"
+            return [self.base / custom]
+        if custom is False:
+            return []
+        return [self.work / "abr" / f"mt_town_city{code}.csv.zip" for code in self.town_master_codes]
+
+    def ward_of(self, address: str) -> str:
+        rest = strip_city(nfkc(address), self.pref, self.name)
+        return next((w for w in self.ward_order if rest.startswith(w)), "")
 
     # ---------- 共通 ----------
     @property
@@ -159,6 +172,11 @@ class Pipeline:
             if std_col not in r:
                 raise SystemExit(f"[{key}] 標準にない項目名です: {std_col}")
             r[std_col] = render(spec, src)
+        wc = inp.get("ward_column")  # 区が別の列にある（さいたま市の AED：「区」と「所在地」）
+        addr = nfkc(r["所在地_連結表記"])
+        if wc and src.get(wc, "").strip() in self.wards and addr and not addr.startswith(
+                (self.pref, self.name, *self.wards)) and not outside_city(addr, self.pref, self.name):
+            r["所在地_連結表記"] = src[wc].strip() + r["所在地_連結表記"]
         code = self.city["code"]
         defaults = {
             "全国地方公共団体コード": code, "地方公共団体名": self.pref + self.name,
@@ -173,7 +191,7 @@ class Pipeline:
                                    "before": r[col], "after": after, "why": why})
                 r[col] = after
 
-        for col, before, after, why in clean_row(r, self.pref, self.name):
+        for col, before, after, why in clean_row(r, self.pref, self.name, tuple(self.wards)):
             self.fixes.append({"dataset": key, "id": r["ID"] or f"#{index + 1}", "column": col,
                                "before": before, "after": after, "why": why})
         if not r["ID"]:
@@ -185,6 +203,15 @@ class Pipeline:
                 notes.append(f"{label}：{v}")
         if inp.get("note"):
             notes.append(inp["note"])
+        for col in inp.get("flags", []):  # 「可」「あり」→「1」、「不可」「なし」→ 空欄、それ以外（「2F以上」）は「1」＋備考
+            v = nfkc(r.get(col, ""))
+            if v in ("可", "あり", "有", "○", "〇", "1"):
+                r[col] = "1"
+            elif v in ("", "不可", "なし", "無", "×", "0"):
+                r[col] = ""
+            else:
+                r[col] = "1"
+                notes.append(f"{col}：{v}")
         cs = inp.get("count_split")
         if cs and src.get(cs["column"]):
             r[cs["number"]], r[cs["unit"]] = split_count(src[cs["column"]])
@@ -209,6 +236,7 @@ class Pipeline:
         self.fill_address(r, bcol, item_base, fix)
         precision = self.fill_coords(key, ds, r, notes, item_base)
         r.pop("_outside", None)
+        r.pop("_ward", None)
         r["備考"] = "／".join([n for n in [r.get("備考", "")] + notes if n])
         return r, precision
 
@@ -219,10 +247,16 @@ class Pipeline:
             r["_outside"] = True  # 市外の施設：住所はそのまま
             return
         r["所在地_連結表記"] = full_address(r["所在地_連結表記"], self.pref, self.name)
+        ward = r["_ward"] = self.ward_of(r["所在地_連結表記"])
+        if ward:  # 政令指定都市：所在地の市区町村・団体コードは区のもの
+            if r["所在地_市区町村"] in ("", self.name):
+                r["所在地_市区町村"] = self.name + ward
+            if r.get("所在地_全国地方公共団体コード") in ("", self.city["code"]):
+                r["所在地_全国地方公共団体コード"] = self.wards[ward]
         tm = self.town_master
         if r["所在地_町字"]:
             if tm and "町字ID" in r and not r["町字ID"]:
-                hit = tm.town_id(r["所在地_町字"])
+                hit = tm.town_id(r["所在地_町字"], ward)
                 if hit:
                     if hit[0] != nfkc(r["所在地_町字"]):
                         fix("所在地_町字", hit[0], "町字の表記を町字マスターに合わせた（丁目の補完など）")
@@ -236,6 +270,8 @@ class Pipeline:
                     r["町字ID"] = again["町字ID"]
             return
         rest = strip_city(canonical_address(r["所在地_連結表記"]), self.pref, self.name)
+        if ward and nfkc(rest).startswith(ward):
+            rest = nfkc(rest)[len(ward):]
         if not rest:
             return  # 市の名前だけで、分けるものがない（位置は確認リストで扱う）
         split = tm.split(r["所在地_連結表記"], self.pref, self.name) if tm else split_address(r["所在地_連結表記"], self.pref, self.name)
@@ -250,14 +286,14 @@ class Pipeline:
                 error = None
                 if compare_key(join_split(cand)) != compare_key(rest):
                     error = "分けた3つをつなげても元の住所に戻りません"
-                elif tm and not tm.town_id(cand.get("所在地_町字", "")):
+                elif tm and not tm.town_id(cand.get("所在地_町字", ""), ward):
                     error = "町字が町字マスターにありません"
                 if error:
                     self.review.ask(item_id, "address_split", context, error=error)
                     return
                 split = dict(cand)
                 if tm:
-                    split["所在地_町字"], split["町字ID"] = tm.town_id(cand["所在地_町字"])
+                    split["所在地_町字"], split["町字ID"] = tm.town_id(cand["所在地_町字"], ward)
                 self.review.record(item_id, d)
             else:
                 self.review.ask(item_id, "address_split", context)
@@ -320,7 +356,7 @@ class Pipeline:
         if self.town_master and r.get("町字ID") and r["所在地_町字"]:
             # 町字マスターで丁目を確かめた住所で検索する（「青木2-1-1」→「青木2丁目1-1」）
             num = re.match(r"[\d-]*", r["所在地_番地以下"]).group(0).rstrip("-")  # 「18、19」「6-9地内」は最初の番地まで
-            query = self.pref + self.name + r["所在地_町字"] + num
+            query = self.pref + self.name + r.get("_ward", "") + r["所在地_町字"] + num
         if d and d["action"] == "use_reference":
             hit = self.reference_index.get(self.ref_key(d.get("name", "")))
             if hit:
