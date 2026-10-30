@@ -110,7 +110,7 @@ class _Towns:
             # 最初の番号が丁目にない（「土呂町352」）→ 丁目のない区域の番地。
             # 「1-51-8」のように3つ続く → 丁目＋番地。「1-42」は決められない
             m = re.match(r"(\d+)", after)
-            if m and int(m.group(1)) not in entry["chome"]:
+            if not m or int(m.group(1)) not in entry["chome"]:  # 町名だけ（「大沢」「越ヶ谷地内」）も丁目のない区域として
                 entry = {**entry, "chome": {}}
             elif not re.match(r"\d+-\d+-\d+", after):
                 return None

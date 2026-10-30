@@ -233,14 +233,14 @@ class Pipeline:
         if len(places) > 1:
             notes.append(f"元データに複数の所在地があったため1つ目を採用（ほかの所在地：{'、'.join(places[1:])}）")
             r["所在地_連結表記"] = places[0]
-        self.fill_address(r, bcol, item_base, fix)
+        self.fill_address(r, bcol, item_base, fix, notes)
         precision = self.fill_coords(key, ds, r, notes, item_base)
         r.pop("_outside", None)
         r.pop("_ward", None)
         r["備考"] = "／".join([n for n in [r.get("備考", "")] + notes if n])
         return r, precision
 
-    def fill_address(self, r: dict, bcol: str, item_base: str, fix) -> None:
+    def fill_address(self, r: dict, bcol: str, item_base: str, fix, notes: list[str]) -> None:
         if not r["所在地_連結表記"]:
             return
         if outside_city(r["所在地_連結表記"], self.pref, self.name):
@@ -275,6 +275,13 @@ class Pipeline:
         if not rest:
             return  # 市の名前だけで、分けるものがない（位置は確認リストで扱う）
         split = tm.split(r["所在地_連結表記"], self.pref, self.name) if tm else split_address(r["所在地_連結表記"], self.pref, self.name)
+        parts = [x.strip() for x in re.split(r"[、,，]", r["所在地_連結表記"]) if x.strip()]
+        if tm and split is None and len(parts) > 1 and all(re.match(r"\D", x) for x in parts[1:]):
+            # 「東越谷4-9-1、越ヶ谷4-2-1」「高鼻町、寿能町地内」のように複数の場所が並ぶ → 町字は1つ目で分け、連結表記はそのまま
+            first = tm.split(parts[0], self.pref, self.name)
+            if first:
+                split = first
+                notes.append(f"所在地に複数の場所があるため、町字・番地以下は1つ目（{parts[0]}）で記載")
         item_id = f"{item_base}:address_split"
         if split is None:
             context = {"address": r["所在地_連結表記"], "rest": rest}
