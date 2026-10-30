@@ -36,6 +36,8 @@ def write_readme(cfg: dict, summary: dict, out_dir: Path) -> Path:
     for ds in cfg["datasets"].values():
         page = ds.get("page", "")
         lines.append(f"- {ds.get('title', ds['standard'])} {page}".rstrip())
+    if summary.get("town_master"):
+        lines.append(f"- 町字・町字ID：デジタル庁「アドレス・ベース・レジストリ」町字マスター（{city['name']}）https://dataset.address-br.digital.go.jp/ を加工して作成")
     lines += [
         "- 緯度・経度の一部：国土地理院「住所検索API」",
         "",
@@ -52,6 +54,13 @@ def write_readme(cfg: dict, summary: dict, out_dir: Path) -> Path:
         lines += ["## 資料間で住所が食い違う施設", "", "座標は公共施設情報の値を採用しています。", ""]
         for m in summary["mismatches"]:
             lines.append(f"- {m['name']}：{m['address']}／公共施設情報「{m['reference_address']}」")
+        lines.append("")
+    if summary.get("outside"):
+        lines += ["## 市外にある施設", "",
+                  "市が市外に持つ施設です。市域の範囲チェックは行わず、元データの座標をそのまま使っています。"
+                  "所在地_都道府県・所在地_全国地方公共団体コードなどが市内の値のままの場合があります。", ""]
+        for o in summary["outside"]:
+            lines.append(f"- {o['name']}（{o['id']}）：{o['address']}" + ("" if o["has_coords"] else "（座標なし）"))
         lines.append("")
     if summary.get("fixes"):
         groups: dict[tuple, list] = {}

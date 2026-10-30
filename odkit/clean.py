@@ -7,6 +7,10 @@
 - 番地の区切りが半角カナの長音（「6ｰ1」）や全角数字
 - 電話番号が「(048)970-7411」
 
+川口市のデータで見つかったもの：
+- 日付が「2018/12/25」、時刻が「9:00」
+- 電話番号が「(048)-259-7651」、先頭に空白
+
 直した内容は (列, 直す前, 直した後, 理由) として返し、README とログに残す。
 """
 
@@ -54,11 +58,17 @@ def clean_row(r: dict, prefecture: str, city: str) -> list[tuple[str, str, str, 
             d = excel_serial_to_date(r[col])
             if d:
                 fix(col, d, "Excelの日付シリアル値を日付に変換")
+            m = re.fullmatch(r"(\d{4})[/.](\d{1,2})[/.](\d{1,2})", nfkc(r[col]))
+            if m:
+                fix(col, f"{m.group(1)}-{int(m.group(2)):02d}-{int(m.group(3)):02d}", "日付をYYYY-MM-DDの形に統一")
     for col in TIME_COLUMNS:
         if r.get(col):
             t = fraction_to_time(r[col])
             if t:
                 fix(col, t, "Excelの時刻（小数）をHH:MMに変換")
+            m = re.fullmatch(r"(\d{1,2})[:：](\d{2})", nfkc(r[col]))
+            if m:
+                fix(col, f"{int(m.group(1)):02d}:{m.group(2)}", "時刻をHH:MMの形に統一")
     if r.get("所在地_市区町村") and r["所在地_市区町村"] != city and nfkc(r["所在地_市区町村"]).startswith(city):
         fix("所在地_市区町村", city, "市区町村の欄に住所全体が入っていた")
     for col in ("所在地_町字", "所在地_番地以下"):
@@ -66,12 +76,15 @@ def clean_row(r: dict, prefecture: str, city: str) -> list[tuple[str, str, str, 
             fix(col, NUMBER_HYPHEN.sub("-", nfkc(r[col])), "全角・半角の表記ゆれを統一")
     if r.get("所在地_連結表記"):
         fix("所在地_連結表記", NUMBER_HYPHEN.sub("-", nfkc(r["所在地_連結表記"])), "全角・半角の表記ゆれを統一")
+        for dup in (prefecture + city + city, prefecture + city + prefecture + city):
+            if r["所在地_連結表記"].startswith(dup):
+                fix("所在地_連結表記", prefecture + city + r["所在地_連結表記"][len(dup):], "住所の市区町村名が重複していた")
     if r.get("法人番号") and not re.fullmatch(r"\d{13}", r["法人番号"]):
         fix("法人番号", "", "法人番号が13桁でない（Excelの指数表記などで桁が失われた）ため空欄に")
     for col in ("電話番号", "連絡先電話番号"):
         if r.get(col):
             v = normalize_phone(r[col])
-            v = re.sub(r"^\((\d+)\)\s*", r"\1-", v)
+            v = re.sub(r"^\((\d+)\)[\s-]*", r"\1-", v)
             fix(col, v, "電話番号の表記を統一")
     return fixes
 

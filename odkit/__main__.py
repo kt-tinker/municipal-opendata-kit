@@ -1,6 +1,7 @@
 """使い方:
 
-  python -m odkit fetch   cities/soka.toml          元データをダウンロード（source が URL のもの）
+  python -m odkit discover 川口市 --slug kawaguchi   県のポータルから候補を探して設定の下書きを作る
+  python -m odkit fetch   cities/soka.toml          元データと町字マスターをダウンロード
   python -m odkit inspect cities/soka.toml          元データの列名と先頭行を書き出す（AI の対応づけ用）
   python -m odkit build   cities/soka.toml [--offline]  標準形式に整えて output/ に書き出す
   python -m odkit status  cities/soka.toml          確認待ちの件数を表示
@@ -32,6 +33,14 @@ def cmd_fetch(cfg: dict) -> None:
             with urllib.request.urlopen(req, timeout=60) as res:
                 dest.write_bytes(res.read())
             print(f"[{key}] 取得しました: {dest}")
+    if cfg["city"].get("town_master", True) is True:
+        from .townmaster import URL
+        dest = p.town_master_path
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        req = urllib.request.Request(URL.format(code=cfg["city"]["code"]), headers={"User-Agent": "municipal-opendata-kit"})
+        with urllib.request.urlopen(req, timeout=60) as res:
+            dest.write_bytes(res.read())
+        print(f"[町字マスター] 取得しました: {dest}")
 
 
 def cmd_inspect(cfg: dict) -> None:
@@ -71,6 +80,10 @@ def cmd_build(cfg: dict, offline: bool) -> int:
     for key, s in summary["datasets"].items():
         prec = " ".join(f"{k}={v}" for k, v in s["precision"].items() if v)
         print(f"  {key}: {s['total']}件（元データで位置あり {s['had_coords']}件）{prec}")
+    if summary["outside"]:
+        print(f"  市外の施設: {len(summary['outside'])}件（範囲チェックの対象外）")
+    if not summary["town_master"]:
+        print("  町字マスターなし：住所の分け方は簡易な規則による（fetch で取得すると町字IDも付きます）")
     print(f"  判断を反映: {summary['review_applied']}件 / 確認待ち: {summary['review_pending']}件")
     if summary["review_pending"]:
         print(f"  → Claude Code で /odkit-review を実行してください（{p.work / 'review' / 'queue.json'}）")

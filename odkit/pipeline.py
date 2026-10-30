@@ -19,6 +19,7 @@ from .normalize import (
     join_split,
     nfkc,
     normalize_phone,
+    outside_city,
     split_address,
     split_count,
     strip_city,
@@ -28,9 +29,18 @@ from .normalize import (
 from .clean import clean_row
 from .review import Review
 from .tables import read_table, write_std_csv
+from .townmaster import TownMaster, compare_key
 
 KIT_ROOT = Path(__file__).resolve().parent.parent
 PRECISIONS = ("source", "reference", "address", "block", "town", "none")
+
+# 以前の版の標準で使われていた列名 → 今の版の列名（passthrough のときに読み替える）
+OLD_COLUMN_NAMES = {
+    "建物名等(方書)": "建物名等（方書）",
+    "バリアフリートイレ": "多目的トイレ",
+    "盲導犬・介助犬、聴導犬同伴": "盲導犬・介助犬・聴導犬同伴",
+    "画像_ライセンス": "画像ライセンス",
+}
 
 
 def load_config(path: Path) -> dict:
@@ -92,6 +102,18 @@ class Pipeline:
         self.fixes: list[dict] = []
         self.reference_index: dict[str, dict] = {}
         self.reference_cfg = cfg.get("reference", {})
+        self.outside: list[dict] = []
+        self.town_master = None
+        if self.town_master_path.exists():
+            self.town_master = TownMaster.load(self.town_master_path)
+
+    @property
+    def town_master_path(self) -> Path:
+        """アドレス・ベース・レジストリの町字マスター（fetch で取得）。"""
+        custom = self.city.get("town_master")
+        if isinstance(custom, str):
+            return self.base / custom
+        return self.work / "abr" / f"mt_town_city{self.city['code']}.csv.zip"
 
     # ---------- 共通 ----------
     @property
@@ -130,6 +152,9 @@ class Pipeline:
             for c in cols:
                 if c in src:
                     r[c] = src[c].strip()
+            for old, new in OLD_COLUMN_NAMES.items():
+                if new in r and new not in src and src.get(old, "").strip():
+                    r[new] = src[old].strip()
         for std_col, spec in inp.get("columns", {}).items():
             if std_col not in r:
                 raise SystemExit(f"[{key}] 標準にない項目名です: {std_col}")
@@ -142,6 +167,12 @@ class Pipeline:
         for k, v in {**defaults, **inp.get("constants", {})}.items():
             if k in r and not r[k]:
                 r[k] = v
+        def fix(col: str, after: str, why: str) -> None:
+            if r[col] != after:
+                self.fixes.append({"dataset": key, "id": r["ID"] or f"#{index + 1}", "column": col,
+                                   "before": r[col], "after": after, "why": why})
+                r[col] = after
+
         for col, before, after, why in clean_row(r, self.pref, self.name):
             self.fixes.append({"dataset": key, "id": r["ID"] or f"#{index + 1}", "column": col,
                                "before": before, "after": after, "why": why})
@@ -170,37 +201,58 @@ class Pipeline:
                 r[col] = normalize_phone(r[col])
 
         item_base = f"{key}:{r['ID']}"
-        self.fill_address(r, bcol, item_base)
+        self.fill_address(r, bcol, item_base, fix)
         precision = self.fill_coords(key, ds, r, notes, item_base)
+        r.pop("_outside", None)
         r["備考"] = "／".join([n for n in [r.get("備考", "")] + notes if n])
         return r, precision
 
-    def fill_address(self, r: dict, bcol: str, item_base: str) -> None:
+    def fill_address(self, r: dict, bcol: str, item_base: str, fix) -> None:
         if not r["所在地_連結表記"]:
             return
+        if outside_city(r["所在地_連結表記"], self.pref, self.name):
+            r["_outside"] = True  # 市外の施設：住所はそのまま
+            return
         r["所在地_連結表記"] = full_address(r["所在地_連結表記"], self.pref, self.name)
+        tm = self.town_master
         if r["所在地_町字"]:
+            if tm and "町字ID" in r and not r["町字ID"]:
+                hit = tm.town_id(r["所在地_町字"])
+                if hit:
+                    if hit[0] != nfkc(r["所在地_町字"]):
+                        fix("所在地_町字", hit[0], "町字の表記を町字マスターに合わせた（丁目の補完など）")
+                    r["町字ID"] = hit[1]
             return
         rest = strip_city(canonical_address(r["所在地_連結表記"]), self.pref, self.name)
-        split = split_address(r["所在地_連結表記"], self.pref, self.name)
+        split = tm.split(r["所在地_連結表記"], self.pref, self.name) if tm else split_address(r["所在地_連結表記"], self.pref, self.name)
         item_id = f"{item_base}:address_split"
         if split is None:
+            context = {"address": r["所在地_連結表記"], "rest": rest}
+            if tm:
+                context["town_master"] = "町字は町字マスターにあるもの（output の README 参照）から選ぶ"
             d = self.review.decision(item_id, "address_split")
             if d:
                 cand = d.get("split", {})
-                if canonical_address(join_split(cand)).replace(" ", "") == rest.replace(" ", ""):
-                    split = cand
-                    self.review.record(item_id, d)
-                else:
-                    self.review.ask(item_id, "address_split", {"address": r["所在地_連結表記"], "rest": rest},
-                                    error="分けた3つをつなげても元の住所に戻りません")
+                error = None
+                if compare_key(join_split(cand)) != compare_key(rest):
+                    error = "分けた3つをつなげても元の住所に戻りません"
+                elif tm and not tm.town_id(cand.get("所在地_町字", "")):
+                    error = "町字が町字マスターにありません"
+                if error:
+                    self.review.ask(item_id, "address_split", context, error=error)
                     return
+                split = dict(cand)
+                if tm:
+                    split["所在地_町字"], split["町字ID"] = tm.town_id(cand["所在地_町字"])
+                self.review.record(item_id, d)
             else:
-                self.review.ask(item_id, "address_split", {"address": r["所在地_連結表記"], "rest": rest})
+                self.review.ask(item_id, "address_split", context)
                 return
         r["所在地_町字"] = split["所在地_町字"]
         r["所在地_番地以下"] = split["所在地_番地以下"]
         r[bcol] = split.get("建物名等", "")
+        if split.get("町字ID") and "町字ID" in r and not r["町字ID"]:
+            r["町字ID"] = split["町字ID"]
 
     def fill_coords(self, key: str, ds: dict, r: dict, notes: list[str], item_base: str) -> str:
         bbox = self.city["bbox"]
@@ -211,6 +263,18 @@ class Pipeline:
             notes.append(f"元データに複数の地点があったため1つ目を採用（ほかの地点：{extra}）")
             r["緯度"], r["経度"] = multi[0][0], multi[1][0]
         lat, lon = to_decimal_degree(r["緯度"]), to_decimal_degree(r["経度"])
+        if r.get("_outside"):
+            # 市外の施設は市域の範囲チェックができない。元データの座標をそのまま使い、なければ付けない
+            self.outside.append({"dataset": key, "id": r["ID"], "name": r["名称"], "address": r["所在地_連結表記"],
+                                 "has_coords": lat is not None and lon is not None})
+            if lat is None or lon is None:
+                r["緯度"] = r["経度"] = ""
+                notes.append("市外にある施設のため緯度経度は付与していない")
+                return "none"
+            r["緯度"], r["経度"] = str(lat), str(lon)
+            notes.append("市外にある施設のため、緯度経度は市域の範囲チェックをせず元データの値を使用")
+            self.stats[key].had_coords += 1
+            return "source"
         if valid_coord(lat, lon, bbox):
             if nfkc(r["緯度"]) != str(lat) and not re.fullmatch(r"-?\d+(\.\d+)?", nfkc(r["緯度"])):
                 notes.append(geo.NOTE_DMS)
@@ -227,19 +291,23 @@ class Pipeline:
             if hit:
                 self.check_mismatch(key, r, hit, item_base)
                 r["緯度"], r["経度"] = hit["緯度"], hit["経度"]
-                notes.append(geo.note_reference(self.name, self.reference_cfg.get("title", "公共施設情報")) + f"（{hit['ID']}）")
+                notes.append(geo.note_reference(self.name, self.reference_cfg.get("title", "公共施設情報")) + f"（{hit['ID']}{self.ref_origin(hit)}）")
                 return "reference"
 
         # 2) 住所から国土地理院で付与（AI の判断で住所を直して再検索することもある）
         item_id = f"{item_base}:geocode"
         d = self.review.decision(item_id, "geocode")
         query = r["所在地_連結表記"]
+        if self.town_master and r.get("町字ID") and r["所在地_町字"]:
+            # 町字マスターで丁目を確かめた住所で検索する（「青木2-1-1」→「青木2丁目1-1」）
+            num = r["所在地_番地以下"] if re.match(r"\d", r["所在地_番地以下"]) else ""
+            query = self.pref + self.name + r["所在地_町字"] + num
         if d and d["action"] == "use_reference":
             hit = self.reference_index.get(self.ref_key(d.get("name", "")))
             if hit:
                 self.review.record(item_id, d)
                 r["緯度"], r["経度"] = hit["緯度"], hit["経度"]
-                notes.append(geo.note_reference(self.name, self.reference_cfg.get("title", "公共施設情報")) + f"（{hit['ID']}・判断による）")
+                notes.append(geo.note_reference(self.name, self.reference_cfg.get("title", "公共施設情報")) + f"（{hit['ID']}・判断による{self.ref_origin(hit)}）")
                 return "reference"
             d = None
         if d and d["action"] == "no_location":  # 無形文化財・天然記念物の動物など、場所を持たないもの
@@ -257,7 +325,7 @@ class Pipeline:
             return "none"
         results = self.geocoder.search(query)
         if results is None:
-            self.review.ask(item_id, "geocode", {"name": r["名称"], "address": query, "note": "オフラインのため未検索"})
+            self.review.ask(item_id, "geocode", {"name": r["名称"], "address": r["所在地_連結表記"], "searched": query, "note": "オフラインのため未検索"})
             return "none"
         best, p = geo.best_match(results, query, self.pref, self.name)
         if best and p in ("address", "block") and valid_coord(best["lat"], best["lon"], bbox):
@@ -280,6 +348,15 @@ class Pipeline:
             "reference_names": self.similar_reference_names(r["名称"]),
         }, error=("修正後の住所でも番地・街区まで特定できませんでした" if d else None))
         return "none"
+
+    @staticmethod
+    def ref_origin(ref: dict) -> str:
+        """転記元の公共施設の位置が元データの値でない場合（住所検索で付けた位置）はそれを書き添える。"""
+        if "街区レベル" in ref.get("備考", ""):
+            return "・転記元の位置は住所検索（街区レベル）"
+        if geo.NOTE_ADDRESS in ref.get("備考", ""):
+            return "・転記元の位置は住所検索"
+        return ""
 
     def similar_reference_names(self, name: str, limit: int = 5) -> list[str]:
         key = self.ref_key(name)
@@ -347,8 +424,13 @@ class Pipeline:
         self.stats[key] = Stats()
         rows, seen, i = [], set(), 0
         for inp in self.inputs(ds):
-            for s in self.load_input(key, inp):
+            for n, s in enumerate(self.load_input(key, inp)):
                 name_col = inp.get("columns", {}).get("名称", "名称")
+                if not render(name_col, s):
+                    filled = "、".join(v for v in s.values() if v.strip())[:40]
+                    self.fixes.append({"dataset": key, "id": f"元データ{n + 2}行目", "column": "（行）",
+                                       "before": filled, "after": "", "why": "名称のない行を除外"})
+                    continue
                 dedupe = ds.get("dedupe_by_name") and render(name_col, s)
                 if dedupe and dedupe in seen:
                     continue  # 複数の元データに同じ施設がある場合は先のものを採る
@@ -381,6 +463,8 @@ class Pipeline:
             "review_applied": len(self.review.applied),
             "mismatches": self.mismatches,
             "fixes": self.fixes,
+            "outside": self.outside,
+            "town_master": bool(self.town_master),
             "geocoder_live_calls": self.geocoder.live_calls,
         }
         (self.work / "summary.json").write_text(json.dumps(summary, ensure_ascii=False, indent=1), "utf-8")

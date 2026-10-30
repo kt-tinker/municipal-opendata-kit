@@ -1,0 +1,29 @@
+# テスト用：川口市の元データ形式（自治体標準の列名・丁目を省いた住所・市外の施設）に合わせた一部データ
+standard_version = "2026-08-01"
+
+[city]
+slug = "kawaguchi-test"
+code = "112038"
+prefecture = "埼玉県"
+name = "川口市"
+id_prefix = "KAWAGUCHI"
+bbox = [35.78, 139.67, 35.90, 139.80]
+license = "公共データ利用規約 第1.0版（PDL1.0）"
+town_master = "fixtures/kawaguchi/mt_town_city112038_excerpt.csv"
+
+[reference]
+dataset = "public_facility"
+title = "公共施設一覧"
+name_strip = ["川口市立", "川口市"]
+
+[datasets.public_facility]
+standard = "public_facility"
+source = "fixtures/kawaguchi/public_facility.csv"
+id_code = "FAC"
+passthrough = true
+
+[datasets.aed]
+standard = "aed"
+source = "fixtures/kawaguchi/aed.csv"
+id_code = "AED"
+passthrough = true

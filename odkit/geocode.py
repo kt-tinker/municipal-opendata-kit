@@ -76,6 +76,7 @@ def judge_precision(query: str, title: str, prefecture: str, city: str) -> str:
     if not t.startswith(prefecture + city) and not t.startswith(city):
         return "none"
     t = strip_city(t, prefecture, city)
+    q, t = q.replace("大字", ""), t.replace("大字", "")  # 「大字」の有無は区別しない
     town_q = re.match(r"^[^\d]+(?:\d+丁目)?", q)
     town_t = re.match(r"^[^\d]+(?:\d+丁目)?", t)
     if not town_q or not town_t or town_q.group(0) != town_t.group(0):

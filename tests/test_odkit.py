@@ -50,6 +50,47 @@ class TestNormalize(unittest.TestCase):
         self.assertEqual(j("埼玉県八潮市中央一丁目"), "none")
 
 
+class TestTownMaster(unittest.TestCase):
+    """町字マスター（アドレス・ベース・レジストリ）で丁目を判定する。fixtures は川口市の町字マスターの抜粋。"""
+
+    def setUp(self):
+        from odkit.townmaster import TownMaster
+        self.tm = TownMaster.load(TESTS / "fixtures/kawaguchi/mt_town_city112038_excerpt.csv")
+
+    def split(self, a):
+        s = self.tm.split(a, "埼玉県", "川口市")
+        return s and (s["所在地_町字"], s["所在地_番地以下"], s["建物名等"], s["町字ID"])
+
+    def test_split(self):
+        self.assertEqual(self.split("埼玉県川口市青木2-1-1"), ("青木2丁目", "1-1", "", "0071002"))
+        self.assertEqual(self.split("埼玉県川口市中青木1-2"), ("中青木1丁目", "2", "", "0013001"))
+        self.assertEqual(self.split("埼玉県川口市芝下1-11"), ("芝下1丁目", "11", "", "0036001"))  # 「芝」より長い「芝下」
+        self.assertEqual(self.split("埼玉県川口市鳩ヶ谷本町1‐6‐3"), ("鳩ヶ谷本町1丁目", "6-3", "", "0014001"))
+        self.assertEqual(self.split("埼玉県川口市神戸767-1"), ("大字神戸", "767-1", "", "0093000"))  # 丁目のない町・大字の省略
+        self.assertEqual(self.split("埼玉県川口市並木元町1-1"), ("並木元町", "1-1", "", "0077000"))
+        self.assertEqual(self.split("埼玉県川口市河原町地内"), ("河原町", "地内", "", "0089000"))
+        self.assertEqual(self.split("埼玉県川口市並木2-地内"), ("並木2丁目", "地内", "", "0045002"))
+        self.assertEqual(self.split("埼玉県川口市飯塚"), ("飯塚", "", "", ""))
+        self.assertEqual(self.split("埼玉県川口市青木二丁目1番1号 本館"), ("青木2丁目", "1-1", "本館", "0071002"))
+        self.assertEqual(self.split("埼玉県川口市赤井1-2-3"), ("赤井1丁目", "2-3", "", "0024001"))
+        self.assertEqual(self.split("埼玉県川口市赤井525‐1"), ("大字赤井", "525-1", "", "0090000"))  # 丁目にない番号→同名の大字
+        self.assertEqual(self.split("埼玉県川口市赤井1-2地内"), ("赤井1丁目", "2地内", "", "0024001"))
+        self.assertIsNone(self.split("埼玉県川口市青木9-1-1"))   # 存在しない丁目
+        self.assertIsNone(self.split("埼玉県川口市存在しない町1-1"))
+
+    def test_town_id(self):
+        self.assertEqual(self.tm.town_id("青木2"), ("青木2丁目", "0071002"))
+        self.assertEqual(self.tm.town_id("赤山"), ("大字赤山", "0098000"))
+        self.assertIsNone(self.tm.town_id("青木"))
+
+    def test_outside_city(self):
+        from odkit.normalize import outside_city
+        self.assertTrue(outside_city("千葉県富津市千種新田755-1", "埼玉県", "川口市"))
+        self.assertTrue(outside_city("埼玉県蕨市中央1-1", "埼玉県", "川口市"))
+        self.assertFalse(outside_city("埼玉県川口市青木2-1-1", "埼玉県", "川口市"))
+        self.assertFalse(outside_city("青木2-1-1", "埼玉県", "川口市"))
+
+
 class TestClean(unittest.TestCase):
     def test_koshigaya_style_values(self):
         from odkit.clean import clean_row
@@ -65,6 +106,15 @@ class TestClean(unittest.TestCase):
         self.assertEqual(r["法人番号"], "")
         self.assertEqual(r["電話番号"], "048-970-7411")
         self.assertEqual(len(fixes), 9)
+
+    def test_kawaguchi_style_values(self):
+        from odkit.clean import clean_row
+        r = {"文化財指定日": "2018/12/25", "開始時間": "9:00", "電話番号": "(048)-259-7651", "連絡先電話番号": " (048)285-2424",
+             "所在地_連結表記": "埼玉県川口市川口市西川口5丁目2-1"}
+        clean_row(r, "埼玉県", "川口市")
+        self.assertEqual(r["所在地_連結表記"], "埼玉県川口市西川口5丁目2-1")
+        self.assertEqual((r["文化財指定日"], r["開始時間"]), ("2018-12-25", "09:00"))
+        self.assertEqual((r["電話番号"], r["連絡先電話番号"]), ("048-259-7651", "048-285-2424"))
 
 
 class TestDiscover(unittest.TestCase):
@@ -100,6 +150,16 @@ class TestDiscover(unittest.TestCase):
             draft = (Path(tmp) / "cities" / "koshigaya.draft.toml").read_text("utf-8")
             self.assertIn("resource_download/380", draft)
             self.assertIn("# [datasets.cultural_property] … ポータルに見つかりませんでした", draft)
+
+    def test_link_resource(self):
+        """川口市のように、市のサイトへのリンクとして登録されているリソース。"""
+        from odkit import discover as dc
+        page = dc.parse('<dt>リソース名</dt><dd>【川口市】AED設置箇所一覧</dd><span>URL</span>'
+                        '<a href="https://www.city.kawaguchi.lg.jp/material/files/group/1/112038_aed.csv">https://www.city.kawaguchi.lg.jp/material/files/group/1/112038_aed.csv</a>'
+                        '<td>最終更新</td><td>2020年09月03日</td>')
+        info = dc.resource_info(page)
+        self.assertEqual(info["url"], "https://www.city.kawaguchi.lg.jp/material/files/group/1/112038_aed.csv")
+        self.assertEqual(info["file"], "112038_aed.csv")
 
 
 class TestPipeline(unittest.TestCase):
@@ -145,6 +205,33 @@ class TestPipeline(unittest.TestCase):
         self.assertNotIn("cultural_property:SOKA-CUL-002:address_split", ids)  # 「地内」は決まった形で分ける
         self.assertEqual(ids["aed:SOKA-AED-020:mismatch"]["waiting_for"], "human")
         self.assertEqual(s["review_applied"], 1)
+
+
+class TestKawaguchiStyle(unittest.TestCase):
+    """すでに標準の列名だが、丁目を省いた住所・座標のない公共施設・市外の施設を含むデータ（川口市の形）。"""
+
+    def test_build(self):
+        for d in ("work/kawaguchi-test", "output/kawaguchi-test"):
+            shutil.rmtree(TESTS / d, ignore_errors=True)
+        s = Pipeline(load_config(TESTS / "cities/kawaguchi-test.toml"), offline=True).run()
+        self.assertTrue(s["town_master"])
+        self.assertEqual(s["datasets"]["public_facility"]["total"], 1)  # 名称のない行は除外
+        self.assertIn("名称のない行を除外", {f["why"] for f in s["fixes"]})
+        with open(TESTS / "output/kawaguchi-test/112038_aed.csv", encoding="utf-8-sig", newline="") as f:
+            aed = {r["ID"]: r for r in csv.DictReader(f)}
+        with open(TESTS / "output/kawaguchi-test/112038_public_facility.csv", encoding="utf-8-sig", newline="") as f:
+            fac = next(csv.DictReader(f))
+        self.assertEqual(fac["多目的トイレ"], "有")  # 以前の版の列名「バリアフリートイレ」を読み替え
+        a = aed["k010000001"]
+        self.assertEqual((a["所在地_町字"], a["所在地_番地以下"], a["町字ID"]), ("青木2丁目", "1-1", "0071002"))
+        self.assertEqual((a["所在地_市区町村"], a["電話番号"], a["法人番号"], a["開始時間"]), ("川口市", "048-258-1249", "", "09:00"))
+        out = aed["k010000094"]  # 市外の施設：座標は元データのまま、住所も書き換えない
+        self.assertEqual((out["緯度"], out["所在地_連結表記"]), ("35.29159687", "千葉県富津市千種新田755-1"))
+        self.assertIn("市外にある施設", out["備考"])
+        self.assertEqual([o["id"] for o in s["outside"]], ["k010000094"])
+        q = {i["id"]: i for i in json.loads((TESTS / "work/kawaguchi-test/review/queue.json").read_text("utf-8"))["items"]}
+        self.assertEqual(q["aed:k010000121:geocode"]["context"]["searched"], "埼玉県川口市河原町")
+        self.assertEqual(q["public_facility:k120000001:geocode"]["context"]["searched"], "埼玉県川口市青木2丁目1-1")
 
 
 if __name__ == "__main__":

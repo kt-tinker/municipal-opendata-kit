@@ -1,0 +1,73 @@
+# 埼玉県川口市の設定（3番目の適用例）
+# 川口市は5種類とも自治体標準の列名で、市のサイト（オープンデータ一覧）に CSV を置いている。
+# 県のポータルには市のサイトへのリンクだけが登録されているので、source は市のサイトの URL にしている。
+#   https://www.city.kawaguchi.lg.jp/soshiki/01020/020/5/4512.html （2026年10月8日更新）
+#
+# 越谷市と同じく Excel を通した崩れ（法人番号の指数表記、市区町村欄への住所全体の混入）がある。
+# 川口市で新たに必要になったこと：
+# - 住所が「青木2-1-1」のように丁目を省いた形 → 町字マスター（アドレス・ベース・レジストリ）で丁目を判定
+# - 公共施設一覧（1,101件）に座標がない → 全件を住所検索で付ける（初回は20分ほどかかる）
+# - 市外の施設（大貫海浜学園＝千葉県富津市、水上少年自然の家＝群馬県みなかみ町）のAED
+#   python -m odkit fetch cities/kawaguchi.toml
+#   python -m odkit build cities/kawaguchi.toml
+
+standard_version = "2026-08-01"
+
+[city]
+slug = "kawaguchi"
+code = "112038"
+prefecture = "埼玉県"
+name = "川口市"
+id_prefix = "KAWAGUCHI"
+bbox = [35.78, 139.67, 35.90, 139.80]   # 範囲チェック用（市域を少し広めに囲む）[南端, 西端, 北端, 東端]
+license = "公共データ利用規約 第1.0版（PDL1.0）"
+
+[reference]
+dataset = "public_facility"
+title = "公共施設一覧"
+name_strip = ["川口市立", "川口市"]
+
+# ---------------- 公共施設（標準形式・座標なし） ----------------
+[datasets.public_facility]
+standard = "public_facility"
+title = "【川口市】公共施設情報"
+page = "https://opendata.pref.saitama.lg.jp/datasets/709"
+source = "https://www.city.kawaguchi.lg.jp/material/files/group/1/112038_public_facility.csv"
+id_code = "FAC"
+passthrough = true
+
+# ---------------- AED（標準形式・397件中364件に座標） ----------------
+[datasets.aed]
+standard = "aed"
+title = "【川口市】AED設置箇所一覧"
+page = "https://opendata.pref.saitama.lg.jp/datasets/413"
+source = "https://www.city.kawaguchi.lg.jp/material/files/group/1/112038_aed.csv"
+id_code = "AED"
+passthrough = true
+
+# ---------------- 文化財（標準形式・163件中136件に座標） ----------------
+[datasets.cultural_property]
+standard = "cultural_property"
+title = "【川口市】文化財一覧"
+page = "https://opendata.pref.saitama.lg.jp/datasets/414"
+source = "https://www.city.kawaguchi.lg.jp/material/files/group/1/112038_cultural_property.csv"
+id_code = "CUL"
+passthrough = true
+
+# ---------------- 観光施設（標準形式・座標あり） ----------------
+[datasets.tourism]
+standard = "tourism"
+title = "【川口市】観光施設一覧"
+page = "https://opendata.pref.saitama.lg.jp/datasets/427"
+source = "https://www.city.kawaguchi.lg.jp/material/files/group/1/112038_tourism.csv"
+id_code = "TOUR"
+passthrough = true
+
+# ---------------- 指定緊急避難場所（標準形式・座標あり） ----------------
+[datasets.evacuation_space]
+standard = "evacuation_space"
+title = "【川口市】指定緊急避難場所一覧"
+page = "https://opendata.pref.saitama.lg.jp/datasets/415"
+source = "https://www.city.kawaguchi.lg.jp/material/files/group/1/112038_evacuation_space.csv"
+id_code = "EVA"
+passthrough = true

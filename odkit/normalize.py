@@ -92,6 +92,18 @@ def strip_city(address: str, prefecture: str, city: str) -> str:
     return t
 
 
+PREFECTURE_RE = re.compile(r"^(東京都|北海道|京都府|大阪府|.{2,3}?県)")
+
+
+def outside_city(address: str, prefecture: str, city: str) -> bool:
+    """住所がほかの都道府県・市区町村のものか（市が市外に持つ施設：臨海学園・少年自然の家など）。"""
+    t = nfkc(address)
+    m = PREFECTURE_RE.match(t)
+    if m and m.group(1) != prefecture:
+        return True
+    return t.startswith(prefecture) and not t.startswith(prefecture + city)
+
+
 def full_address(address: str, prefecture: str, city: str) -> str:
     """都道府県・市区町村が抜けていれば補う。"""
     t = nfkc(address)

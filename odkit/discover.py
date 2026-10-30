@@ -6,6 +6,7 @@
 2. その市町村のデータセット一覧を全ページたどる
 3. 標準データセット（AED・公共施設・文化財・観光・指定緊急避難場所）に当たりそうなものを選ぶ
 4. 各リソースのファイル名・最終更新日・ダウンロードURLを調べる
+   （川口市のように、ポータルには市のサイトへのリンクだけを載せている市町村もある。その場合はリンク先を使う）
 5. work/<slug>/discover.json と cities/<slug>.draft.toml を書き出す
 
 列の対応づけは、この下書きをもとに fetch → inspect → /odkit-map-columns で行う。
@@ -116,7 +117,11 @@ def resource_info(page: _Anchors) -> dict:
     t = page.text
     name = re.search(r"ファイル名\s+(.+?)\s+ダウンロード", t)
     updated = re.search(r"最終更新\s+(\d{4}年\d{1,2}月\d{1,2}日)", t)
-    return {"file": name.group(1).strip() if name else "", "updated": updated.group(1) if updated else ""}
+    info = {"file": name.group(1).strip() if name else "", "updated": updated.group(1) if updated else ""}
+    link = re.search(r"\bURL\s+(https?://\S+)", t)
+    if not name and link:  # ファイルではなく、市町村のサイトへのリンクとして登録されているもの
+        info.update({"file": link.group(1).rsplit("/", 1)[-1], "url": link.group(1)})
+    return info
 
 
 def classify(title: str) -> str | None:
@@ -149,7 +154,7 @@ def discover(city: str, slug: str, base: Path) -> dict:
         for res_id, res_title in resource_links(parse(get(f"/datasets/{ds_id}"))).items():
             info = resource_info(parse(get(f"/resources/{res_id}")))
             res.append({"id": res_id, "title": res_title, **info,
-                        "download": f"{PORTAL}/resource_download/{res_id}"})
+                        "download": info.get("url") or f"{PORTAL}/resource_download/{res_id}"})
         picks[key].append({"dataset_id": ds_id, "title": title, "page": f"{PORTAL}/datasets/{ds_id}", "resources": res})
 
     result = {"city": city, "organization_id": org_id, "dataset_count": count,
@@ -208,7 +213,8 @@ def write_draft(result: dict, slug: str, path: Path) -> None:
             f'standard = "{key}"',
             f'title = "{cand["title"]}"',
             f'page = "{cand["page"]}"',
-            f'source = "{res["download"]}"   # {res["file"]}（最終更新 {res["updated"]}）',
+            f'source = "{res["download"]}"   # {res["file"]}（'
+            + ("市のサイトへのリンク。ポータルの最終更新日は登録時のもの" if res.get("url") else f"最終更新 {res['updated']}") + "）",
             f'format = "{fmt}"',
             f'id_code = "{key[:3].upper()}"',
             "# passthrough = true   # 元データがすでに標準の列名なら",
