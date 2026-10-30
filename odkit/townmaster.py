@@ -125,7 +125,11 @@ class _Towns:
             elif after and after not in NO_NUMBER:
                 return None
         elif re.match(r"\d+丁目", after):
-            return None  # 丁目のない町に丁目が書かれている
+            # 丁目のない町に丁目が書かれている。「大字大間木3丁目」→ 丁目のある「大間木」なら照らせる
+            key = self.alias[alias]
+            if key.startswith("大字") and self.oaza.get(key[2:], {}).get("chome") and rest.startswith("大字"):
+                return self.split_rest(rest[2:])
+            return None
         after = after.lstrip("-")
         # 町字マスターにない小字（「字木畔511」「字中島地内」）は番地以下に含める
         if re.fullmatch(r"字[^\d、,・()（）]+?(\d+(?:-\d+)*)?(地内|他|外|ほか)?", after):
