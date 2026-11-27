@@ -40,7 +40,8 @@ def write_readme(cfg: dict, summary: dict, out_dir: Path) -> Path:
     if summary.get("town_master"):
         lines.append(f"- 町字・町字ID：デジタル庁「アドレス・ベース・レジストリ」町字マスター（{city['name']}）https://dataset.address-br.digital.go.jp/ を加工して作成")
     lines += [
-        "- 緯度・経度の一部：国土地理院「住所検索API」",
+        "- 緯度・経度の一部：国土地理院「地理院地図」の住所検索（https://msearch.gsi.go.jp/address-search/AddressSearch）で住所から求め、"
+        "加工したもの（国土地理院が作成・保証した位置ではありません）",
         "",
         "## 緯度・経度の付け方",
         "",
